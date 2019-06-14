@@ -184,6 +184,19 @@ SyncronizationMode = enum.IntEnum('SynchronizationMode', start=0, names=[
     'SLAVE_STARTS_WHEN_MASTER_STOPS'
 ])
 
+class ReadoutFlag(enum.IntFlag):
+    NORMAL_READOUT = 0x0             # 
+    STORE_IN_RAM = 0x1               # data are stored in ram and sent only after end
+                                     # of acquisition for faster frame rate
+    READ_HITS = 0x2                  # return only the number of the channel which counted
+                                     # ate least one
+    ZERO_COMPRESSION = 0x4           # returned data are 0-compressed
+    PUMP_PROBE_MODE = 0x8            # pump-probe mode
+    BACKGROUND_CORRECTIONS = 0x1000  # background corrections
+    TOT_MODE = 0x2000                # pump-probe mode
+    CONTINOUS_RO = 0x4000            # pump-probe mode
+
+
 class Connection:
 
     def __init__(self, addr):
@@ -331,6 +344,22 @@ class Detector:
     def exposure_time(self, exposure_time):
         self.set_timer(TimerType.ACQUISITION_TIME, exposure_time)
 
+    @property
+    def nb_frames(self):
+        return self.get_timer(TimerType.FRAME_NUMBER)
+
+    @nb_frames.setter
+    def nb_frames(self, nb_frames):
+        self.set_timer(TimerType.FRAME_NUMBER, nb_frames)
+
+    @property
+    def nb_cycles(self):
+        return self.get_timer(TimerType.CYCLES_NUMBER)
+
+    @nb_cycles.setter
+    def nb_cycles(self, nb_cycles):
+        self.set_timer(TimerType.CYCLES_NUMBER, nb_cycles)
+
     @auto_ctrl_connect
     def get_master(self):
         return get_master(self.conn_ctrl)
@@ -360,7 +389,23 @@ class Detector:
     @auto_stop_connect
     def stop_acquisition(self):
         stop_acquisition(self.conn_stop)
-    
+
+    @auto_ctrl_connect
+    def get_readout(self):
+        return get_readout(self.conn_ctrl)
+
+    @auto_ctrl_connect
+    def set_readout(self, value):
+        return set_readout(self.conn_ctrl, value)
+
+    readout = property(get_readout, set_readout)
+
+    @auto_ctrl_connect
+    def get_rois(self):
+        return get_rois(self.conn_ctrl)
+
+    rois = property(get_rois)
+
 
 def update_client(conn):
     request = struct.pack('<i', CommandCode.UPDATE_CLIENT)
@@ -502,12 +547,38 @@ def set_master(conn, master):
     return _master(conn, master)
 
 
+def _readout(conn, value=-1):
+    request = struct.pack('<ii', CommandCode.SET_READOUT_FLAGS, value)
+    result, reply = conn.request_reply(request, reply_fmt='<i')
+    return result, ReadoutFlag(reply[0])
+
+def get_readout(conn):
+    return _readout(conn)
+
+def set_readout(conn, value):
+    return _readout(conn, value)
+
+
+def get_rois(conn):
+    request = struct.pack('<ii', CommandCode.SET_ROI, -1)
+    result, reply = conn.request_reply(request, reply_fmt='<i')
+    nb_rois = reply[0]
+    raw_data = conn.read_format('<{}i'.format(4 * nb_rois))
+    rois = []
+    for i in range(nb_rois):
+        roi = dict(xmin=raw_data[4*i+0], xmax=raw_data[4*i+1],
+                   ymin=raw_data[4*i+2], ymax=raw_data[4*i+3])
+        rois.append(roi)
+    return rois
+
+
 def start_acquisition(conn):
     request = struct.pack('<i', CommandCode.START_ACQUISITION)
     result, reply = conn.request_reply(request, reply_fmt=None)
 
 
 # STOP Connection -------------------------------------------------------------
+
 
 def get_run_status(stop_conn):
     request = struct.pack('<i', CommandCode.GET_RUN_STATUS)
