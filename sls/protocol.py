@@ -6,6 +6,9 @@ import functools
 
 import numpy
 
+DEFAULT_CTRL_PORT = 1952
+DEFAULT_STOP_PORT = 1953
+
 INET_ADDRSTRLEN = 16
 
 CommandCode = enum.IntEnum('CommandCode', start=0, names=[
@@ -185,7 +188,7 @@ SyncronizationMode = enum.IntEnum('SynchronizationMode', start=0, names=[
 ])
 
 class ReadoutFlag(enum.IntFlag):
-    NORMAL_READOUT = 0x0             # 
+    NORMAL_READOUT = 0x0             #
     STORE_IN_RAM = 0x1               # data are stored in ram and sent only after end
                                      # of acquisition for faster frame rate
     READ_HITS = 0x2                  # return only the number of the channel which counted
@@ -231,11 +234,17 @@ class Connection:
 
     def recv(self, size):
         data = self.sock.recv(size)
+        if not data:
+            self.close()
+            raise ConnectionError('connection closed')
         self.log.debug('recv: %r', data)
         return data
 
     def read(self, size):
         data = self.reader.read(size)
+        if not data:
+            self.close()
+            raise ConnectionError('connection closed')
         self.log.debug('read: %r', data)
         return data
 
@@ -286,7 +295,7 @@ class Detector:
                 return reply
         return wrapper
 
-    def __init__(self, host, ctrl_port=1952, stop_port=1953):
+    def __init__(self, host, ctrl_port=DEFAULT_CTRL_PORT, stop_port=DEFAULT_STOP_PORT):
         self.conn_ctrl = Connection((host, ctrl_port))
         self.conn_stop = Connection((host, stop_port))
 
@@ -373,7 +382,7 @@ class Detector:
     @auto_ctrl_connect
     def get_settings(self, mod_nb):
         return get_settings(self.conn_ctrl, mod_nb)
-    
+
     @auto_stop_connect
     def get_run_status(self):
         return get_run_status(self.conn_stop)
@@ -462,9 +471,9 @@ def get_module(conn, mod_nb):
         info['channel_registers'] = []
     info['gain'], info['offset'] = conn.read_format('<dd')
     return result, info
-              
-    
-    
+
+
+
 def get_id(conn, mode, mod_nb=-1):
     assert isinstance(mode, IdParam)
     request = struct.pack('<ii', CommandCode.GET_ID, mode)
@@ -527,7 +536,7 @@ def _synchronization(conn, value=-1):
     request = struct.pack('<ii', CommandCode.SET_SYNCHRONIZATION_MODE, value)
     result, reply = conn.request_reply(request, reply_fmt='<i')
     return result, SyncronizationMode(reply[0])
-    
+
 def get_synchronization(conn):
     return _synchronization(conn)
 
@@ -592,4 +601,4 @@ def stop_acquisition(stop_conn):
 
 
 if __name__ == '__main__':
-    conn = Connection(('bl04mythen', 1952))
+    conn = Connection(('bl04mythen', DEFAULT_CTRL_PORT))
