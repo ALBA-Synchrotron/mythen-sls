@@ -1,15 +1,14 @@
 import enum
-import socket
 import struct
-import logging
-import functools
-
-import numpy
 
 DEFAULT_CTRL_PORT = 1952
 DEFAULT_STOP_PORT = 1953
 
 INET_ADDRSTRLEN = 16
+INET_TEMPLATE = '{{:\x00<{}}}'.format(INET_ADDRSTRLEN)
+
+GET_CODE = -1
+
 
 CommandCode = enum.IntEnum('CommandCode', start=0, names=[
     'EXEC_COMMAND',
@@ -51,8 +50,8 @@ CommandCode = enum.IntEnum('CommandCode', start=0, names=[
     'SET_ALL_MODULES',
 
     'SET_SETTINGS',
-    'GET_THRESHOLD_ENERGY',
-    'SET_THRESHOLD_ENERGY',
+    'GET_ENERGY_THRESHOLD',
+    'SET_ENERGY_THRESHOLD',
 
     # Acquisition functions
     'START_ACQUISITION',
@@ -64,7 +63,7 @@ CommandCode = enum.IntEnum('CommandCode', start=0, names=[
     'READ_ALL',
 
     # Acquisition setup functions
-    'SET_TIMER',
+    'TIMER',
     'GET_TIME_LEFT',
 
     'SET_DYNAMIC_RANGE',
@@ -100,11 +99,8 @@ CommandCode = enum.IntEnum('CommandCode', start=0, names=[
 ])
 
 
-class DetectorError(Exception):
+class SLSError(Exception):
     pass
-
-
-CommandCode.htonl = lambda self: struct.pack('<i', self.value)
 
 
 IdParam = enum.IntEnum('IdParam', start=0, names=[
@@ -126,38 +122,40 @@ ResultType = enum.IntEnum('ResultType', start=0, names=[
 
 
 DetectorSettings = enum.IntEnum('DetectorSettings', start=0, names=[
-  'STANDARD',
-  'FAST',
-  'HIGHGAIN',
-  'DYNAMICGAIN',
-  'LOWGAIN',
-  'MEDIUMGAIN',
-  'VERYHIGHGAIN',
-  'UNDEFINED',
-  'UNINITIALIZED'
+    'STANDARD',
+    'FAST',
+    'HIGHGAIN',
+    'DYNAMICGAIN',
+    'LOWGAIN',
+    'MEDIUMGAIN',
+    'VERYHIGHGAIN',
+    'UNDEFINED',
+    'UNINITIALIZED'
 ])
+
 
 DetectorType = enum.IntEnum('DetectorType', start=0, names=[
-  'GENERIC',
-  'MYTHEN',
-  'PILATUS',
-  'EIGER',
-  'GOTTHARD',
-  'PICASSO',
-  'AGIPD',
-  'MOENCH'
+    'GENERIC',
+    'MYTHEN',
+    'PILATUS',
+    'EIGER',
+    'GOTTHARD',
+    'PICASSO',
+    'AGIPD',
+    'MOENCH'
 ])
 
+
 TimerType = enum.IntEnum('TimerType', start=0, names=[
-    'FRAME_NUMBER',        # number of real time frames: total number of
+    'NB_FRAMES',           # number of real time frames: total number of
                            # acquisitions is number or frames*number of cycles
     'ACQUISITION_TIME',    # exposure time
     'FRAME_PERIOD',        # period between exposures
     'DELAY_AFTER_TRIGGER', # delay between trigger and start of exposure or
                            # readout (in triggered mode)
-    'GATES_NUMBER',        # number of gates per frame (in gated mode)
-    'PROBES_NUMBER',       # number of probe types in pump-probe mode
-    'CYCLES_NUMBER',       # number of cycles: total number of acquisitions
+    'NB_GATES',            # number of gates per frame (in gated mode)
+    'NB_PROBES',           # number of probe types in pump-probe mode
+    'NB_CYCLES',           # number of cycles: total number of acquisitions
                            # is number or frames*number of cycles
     'ACTUAL_TIME',         # Actual time of the detector's internal timer
     'MEASUREMENT_TIME',    # Time of the measurement from the detector (fifo)
@@ -174,11 +172,13 @@ RunStatus = enum.IntEnum('RunStatus', start=0, names=[
     'RUNNING'       # acquisition  running, no data in memory
 ])
 
+
 Master = enum.IntEnum('Master', start=0, names=[
     'NO_MASTER',
     'IS_MASTER',
     'IS_SLAVE'
 ])
+
 
 SyncronizationMode = enum.IntEnum('SynchronizationMode', start=0, names=[
     'NO_SYNCHRONIZATION',
@@ -186,6 +186,7 @@ SyncronizationMode = enum.IntEnum('SynchronizationMode', start=0, names=[
     'MASTER_TRIGGERS',
     'SLAVE_STARTS_WHEN_MASTER_STOPS'
 ])
+
 
 class ReadoutFlag(enum.IntFlag):
     NORMAL_READOUT = 0x0             #
@@ -200,225 +201,56 @@ class ReadoutFlag(enum.IntFlag):
     CONTINOUS_RO = 0x4000            # pump-probe mode
 
 
-class Connection:
-
-    def __init__(self, addr):
-        self.addr = addr
-        self.sock = None
-        self.log = logging.getLogger('Connection({0[0]}:{0[1]})'.format(addr))
-
-    def connect(self):
-        sock = socket.socket()
-        sock.connect(self.addr)
-        self.reader = sock.makefile('rb')
-        self.sock = sock
-
-    def close(self):
-        if self.sock:
-            self.sock.close()
-            self.sock = None
-
-    def __repr__(self):
-        return '{0}({1[0]}:{1[1]})'.format(type(self).__name__, self.addr)
-
-    def __enter__(self):
-        self.connect()
-        return self
-
-    def __exit__(self, etype, evalue, etb):
-        self.close()
-
-    def write(self, buff):
-        self.log.debug('send: %r', buff)
-        self.sock.sendall(buff)
-
-    def recv(self, size):
-        data = self.sock.recv(size)
-        if not data:
-            self.close()
-            raise ConnectionError('connection closed')
-        self.log.debug('recv: %r', data)
-        return data
-
-    def read(self, size):
-        data = self.reader.read(size)
-        if not data:
-            self.close()
-            raise ConnectionError('connection closed')
-        self.log.debug('read: %r', data)
-        return data
-
-    def read_format(self, fmt):
-        n = struct.calcsize(fmt)
-        return struct.unpack(fmt, self.read(n))
-
-    def read_i32(self):
-        return self.read_format('<i')[0]
-
-    def read_i64(self):
-        return self.read_format('<q')[0]
-
-    def read_result(self):
-        return ResultType(self.read_i32())
-
-    def request_reply(self, request, reply_fmt='<i'):
-        self.write(request)
-        result = self.read_result()
-        if result == ResultType.FAIL:
-            err_msg = self.recv(1024)
-            raise DetectorError('{}'.format(err, err_msg.decode()))
-        reply = self.read_format(reply_fmt) if reply_fmt else None
-        return result, reply
+def read_format(conn, fmt):
+    n = struct.calcsize(fmt)
+    reply = conn.read(n)
+    if not reply:
+        raise ConnectionError('connection closed')
+    return struct.unpack(fmt, reply)
 
 
-class Detector:
+def read_i32(conn):
+    return read_format(conn, '<i')[0]
 
-    def auto_ctrl_connect(f):
-        name = f.__name__
-        is_update = name != 'update_client'
-        @functools.wraps(f)
-        def wrapper(self, *args, **kwargs):
-            with self.conn_ctrl:
-                result, reply = f(self, *args, **kwargs)
-                if result == ResultType.FORCE_UPDATE and not is_update:
-                    self.update_client()
-                return reply
-        return wrapper
 
-    def auto_stop_connect(f):
-        @functools.wraps(f)
-        def wrapper(self, *args, **kwargs):
-            with self.conn_stop:
-                result, reply = f(self, *args, **kwargs)
-                if result == ResultType.FAIL:
-                    raise DetectorError('{}'.format(err, err_msg.decode()))
-                return reply
-        return wrapper
+def read_i64(conn):
+    return read_format(conn, '<q')[0]
 
-    def __init__(self, host, ctrl_port=DEFAULT_CTRL_PORT, stop_port=DEFAULT_STOP_PORT):
-        self.conn_ctrl = Connection((host, ctrl_port))
-        self.conn_stop = Connection((host, stop_port))
 
-    @auto_ctrl_connect
-    def update_client(self):
-        return update_client(self.conn_ctrl)
+def read_result(conn):
+    return ResultType(read_i32(conn))
 
-    @auto_ctrl_connect
-    def get_id(self, mode, mod_nb=-1):
-        return get_id(self.conn_ctrl, mode, mod_nb=mod_nb)
 
-    @auto_ctrl_connect
-    def get_energy_threshold(self, mod_nb=0):
-        return get_energy_threshold(self.conn_ctrl, mod_nb)
+def read_command(conn):
+    return CommandCode(read_i32(conn))
 
-    @auto_ctrl_connect
-    def get_synchronization(self):
-        return get_synchronization(self.conn_ctrl)
 
-    @auto_ctrl_connect
-    def set_synchronization(self, value):
-        return set_synchronization(self.conn_ctrl, value)
+def read_message(conn):
+    return conn.recv(1024).decode()
 
-    synchronization = property(get_synchronization, set_synchronization)
 
-    @auto_ctrl_connect
-    def get_type(self):
-        return get_detector_type(self.conn_ctrl)
+def read_data(conn, size):
+    data = conn.read(size)
+    data_size = len(data)
+    if data_size != size:
+        raise SLSError('wrong data size received: ' \
+                       'expected {} bytes but got {} bytes'
+                       .format(size, data_size))
+    return numpy.frombuffer(data, dtype='<i4')
 
-    @auto_ctrl_connect
-    def get_module(self, mod_nb=0):
-        return get_module(self.conn_ctrl, mod_nb)
 
-    @auto_ctrl_connect
-    def get_time_left(self, timer):
-        return get_time_left(self.conn_ctrl, timer)
-
-    @property
-    def exposure_time_left(self):
-        return self.get_time_left(TimerType.ACQUISITION_TIME)
-
-    @auto_ctrl_connect
-    def set_timer(self, timer, value):
-        return set_timer(self.conn_ctrl, timer, value)
-
-    @auto_ctrl_connect
-    def get_timer(self, timer):
-        return get_timer(self.conn_ctrl, timer)
-
-    @property
-    def exposure_time(self):
-        return self.get_timer(TimerType.ACQUISITION_TIME)
-
-    @exposure_time.setter
-    def exposure_time(self, exposure_time):
-        self.set_timer(TimerType.ACQUISITION_TIME, exposure_time)
-
-    @property
-    def nb_frames(self):
-        return self.get_timer(TimerType.FRAME_NUMBER)
-
-    @nb_frames.setter
-    def nb_frames(self, nb_frames):
-        self.set_timer(TimerType.FRAME_NUMBER, nb_frames)
-
-    @property
-    def nb_cycles(self):
-        return self.get_timer(TimerType.CYCLES_NUMBER)
-
-    @nb_cycles.setter
-    def nb_cycles(self, nb_cycles):
-        self.set_timer(TimerType.CYCLES_NUMBER, nb_cycles)
-
-    @auto_ctrl_connect
-    def get_master(self):
-        return get_master(self.conn_ctrl)
-
-    @auto_ctrl_connect
-    def set_master(self, master):
-        return set_master(self.conn_ctrl, master)
-
-    master = property(get_master, set_master)
-
-    @auto_ctrl_connect
-    def get_settings(self, mod_nb):
-        return get_settings(self.conn_ctrl, mod_nb)
-
-    @auto_stop_connect
-    def get_run_status(self):
-        return get_run_status(self.conn_stop)
-
-    @property
-    def run_status(self):
-        return self.get_run_status()
-
-    @auto_ctrl_connect
-    def start_acquisition(self):
-        start_acquisition(self.conn_ctrl)
-
-    @auto_stop_connect
-    def stop_acquisition(self):
-        stop_acquisition(self.conn_stop)
-
-    @auto_ctrl_connect
-    def get_readout(self):
-        return get_readout(self.conn_ctrl)
-
-    @auto_ctrl_connect
-    def set_readout(self, value):
-        return set_readout(self.conn_ctrl, value)
-
-    readout = property(get_readout, set_readout)
-
-    @auto_ctrl_connect
-    def get_rois(self):
-        return get_rois(self.conn_ctrl)
-
-    rois = property(get_rois)
+def request_reply(conn, request, reply_fmt='<i'):
+    conn.write(request)
+    result = read_result(conn)
+    if result == ResultType.FAIL:
+        raise SLSError(read_message(conn))
+    reply = read_format(conn, reply_fmt) if reply_fmt else None
+    return result, reply
 
 
 def update_client(conn):
     request = struct.pack('<i', CommandCode.UPDATE_CLIENT)
-    result, reply = conn.request_reply(request, reply_fmt='<16siiiiiiqqqqqqq')
+    result, reply = request_reply(conn, request, reply_fmt='<16siiiiiiqqqqqqq')
     info = dict(last_client_ip=reply[0].strip(b'\x00').decode(),
                 nb_modules=reply[1],
                 dynamic_range=reply[3],
@@ -436,14 +268,14 @@ def update_client(conn):
 
 
 def get_detector_type(conn):
-    request = struct.pack('<ii', CommandCode.GET_DETECTOR_TYPE, -1)
-    result, reply = conn.request_reply(request, reply_fmt='<i')
+    request = struct.pack('<i', CommandCode.GET_DETECTOR_TYPE)
+    result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, DetectorType(reply[0])
 
 
 def get_module(conn, mod_nb):
     request = struct.pack('<ii', CommandCode.GET_MODULE, mod_nb)
-    result, reply = conn.request_reply(request, reply_fmt='<iiiiiii')
+    result, reply = request_reply(conn, request, reply_fmt='<iiiiiii')
     info = dict(module_nb=reply[0],
                 serial_nb=reply[1],
                 nb_channels=reply[2],
@@ -473,36 +305,35 @@ def get_module(conn, mod_nb):
     return result, info
 
 
-
-def get_id(conn, mode, mod_nb=-1):
+def get_id(conn, mode, mod_nb=GET_CODE):
     assert isinstance(mode, IdParam)
     request = struct.pack('<ii', CommandCode.GET_ID, mode)
-    result, reply = conn.request_reply(request, reply_fmt='<q')
+    result, reply = request_reply(conn, request, reply_fmt='<q')
     return result, reply[0]
 
 
 def get_settings(conn, mod_nb):
-    request = struct.pack('<iii', CommandCode.SET_SETTINGS, -1, mod_nb)
-    result, reply = conn.request_reply(request, reply_fmt='<i')
+    request = struct.pack('<iii', CommandCode.SET_SETTINGS, GET_CODE, mod_nb)
+    result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, DetectorSettings(reply[0])
 
 
 def get_energy_threshold(conn, mod_nb):
-    request = struct.pack('<ii', CommandCode.GET_THRESHOLD_ENERGY, mod_nb)
-    result, reply = conn.request_reply(request, reply_fmt='<i')
+    request = struct.pack('<ii', CommandCode.GET_ENERGY_THRESHOLD, mod_nb)
+    result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, reply[0]
 
 def set_energy_threshold(conn, mod_nb, energy, settings):
-    request = struct.pack('<iiii', CommandCode.SET_THRESHOLD_ENERGY, energy,
+    request = struct.pack('<iiii', CommandCode.SET_ENERGY_THRESHOLD, energy,
                           mod_nb, settings)
-    result, reply = conn.request_reply(request, reply_fmt='<i')
+    result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, reply[0]
 
 
 def get_time_left(conn, timer):
     assert isinstance(timer, TimerType)
     request = struct.pack('<ii', CommandCode.GET_TIME_LEFT, timer)
-    result, reply = conn.request_reply(request, reply_fmt='<q')
+    result, reply = request_reply(conn, request, reply_fmt='<q')
     value = reply[0]
     if timer in (TimerType.ACQUISITION_TIME, TimerType.FRAME_PERIOD,
                  TimerType.DELAY_AFTER_TRIGGER):
@@ -510,15 +341,15 @@ def get_time_left(conn, timer):
     return result, value
 
 
-def _timer(conn, timer, value=-1):
+def _timer(conn, timer, value=GET_CODE):
     assert isinstance(timer, TimerType)
-    if value != -1:
+    if value != GET_CODE:
         if timer in (TimerType.ACQUISITION_TIME, TimerType.FRAME_PERIOD,
                      TimerType.DELAY_AFTER_TRIGGER):
             value *= 1E+9
         value = int(value)
-    request = struct.pack('<iiq', CommandCode.SET_TIMER, timer, value)
-    result, reply = conn.request_reply(request, reply_fmt='<q')
+    request = struct.pack('<iiq', CommandCode.TIMER, timer, value)
+    result, reply = request_reply(conn, request, reply_fmt='<q')
     value = reply[0]
     if timer in (TimerType.ACQUISITION_TIME, TimerType.FRAME_PERIOD,
                  TimerType.DELAY_AFTER_TRIGGER):
@@ -532,9 +363,9 @@ def set_timer(conn, timer, value):
     return _timer(conn, timer, value)
 
 
-def _synchronization(conn, value=-1):
+def _synchronization(conn, value=GET_CODE):
     request = struct.pack('<ii', CommandCode.SET_SYNCHRONIZATION_MODE, value)
-    result, reply = conn.request_reply(request, reply_fmt='<i')
+    result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, SyncronizationMode(reply[0])
 
 def get_synchronization(conn):
@@ -544,9 +375,9 @@ def set_synchronization(conn, value):
     return _synchronization(conn, value)
 
 
-def _master(conn, value=-1):
+def _master(conn, value=GET_CODE):
     request = struct.pack('<ii', CommandCode.SET_MASTER, value)
-    result, reply = conn.request_reply(request, reply_fmt='<i')
+    result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, Master(reply[0])
 
 def get_master(conn):
@@ -556,9 +387,9 @@ def set_master(conn, master):
     return _master(conn, master)
 
 
-def _readout(conn, value=-1):
+def _readout(conn, value=GET_CODE):
     request = struct.pack('<ii', CommandCode.SET_READOUT_FLAGS, value)
-    result, reply = conn.request_reply(request, reply_fmt='<i')
+    result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, ReadoutFlag(reply[0])
 
 def get_readout(conn):
@@ -569,8 +400,8 @@ def set_readout(conn, value):
 
 
 def get_rois(conn):
-    request = struct.pack('<ii', CommandCode.SET_ROI, -1)
-    result, reply = conn.request_reply(request, reply_fmt='<i')
+    request = struct.pack('<ii', CommandCode.SET_ROI, GET_CODE)
+    result, reply = request_reply(conn, request, reply_fmt='<i')
     nb_rois = reply[0]
     raw_data = conn.read_format('<{}i'.format(4 * nb_rois))
     rois = []
@@ -583,7 +414,24 @@ def get_rois(conn):
 
 def start_acquisition(conn):
     request = struct.pack('<i', CommandCode.START_ACQUISITION)
-    result, reply = conn.request_reply(request, reply_fmt=None)
+    result, reply = request_reply(conn, request, reply_fmt=None)
+
+
+def start_and_read_all(conn, frame_size):
+    request = struct.pack('<i', CommandCode.START_AND_READ_ALL)
+    conn.write(request)
+    while True:
+        try:
+            result = read_result(conn)
+            if result == ResultType.OK:
+                frame = read_data(conn, frame_size)
+                yield frame
+            elif result == ResultType.FINISHED:
+                raise StopIteration(read_message(conn))
+            elif result == ResultType.FAIL:
+                raise SLSError(read_message(conn))
+        except ConnectionError:
+            break
 
 
 # STOP Connection -------------------------------------------------------------
@@ -591,14 +439,10 @@ def start_acquisition(conn):
 
 def get_run_status(stop_conn):
     request = struct.pack('<i', CommandCode.GET_RUN_STATUS)
-    result, reply = stop_conn.request_reply(request, reply_fmt='<i')
+    result, reply = request_reply(stop_conn, request, reply_fmt='<i')
     return result, RunStatus(reply[0])
 
 
 def stop_acquisition(stop_conn):
     request = struct.pack('<i', CommandCode.STOP_ACQUISITION)
-    result, reply = stop_conn.request_reply(request, reply_fmt=None)
-
-
-if __name__ == '__main__':
-    conn = Connection(('bl04mythen', DEFAULT_CTRL_PORT))
+    result, reply = request_reply(stop_conn, request, reply_fmt=None)
