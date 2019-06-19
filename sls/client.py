@@ -59,7 +59,7 @@ class Detector:
 
     def auto_ctrl_connect(f):
         name = f.__name__
-        is_update = name != 'update_client'
+        is_update = name == 'update_client'
         @functools.wraps(f)
         def wrapper(self, *args, **kwargs):
             with self.conn_ctrl:
