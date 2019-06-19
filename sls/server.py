@@ -370,7 +370,7 @@ class Detector:
         return struct.pack('<i', result)
 
     def start_and_read_all(self, conn, addr):
-        self.run_status = RunStatus.RUNNING
+        self._run_status = RunStatus.RUNNING
         nb_cycles = max(self['nb_cycles'], 1)
         nb_frames = max(self['nb_frames'], 1)
         acq_time = self['acquisition_time']*1e-9
@@ -395,7 +395,7 @@ class Detector:
                 if dead_time:
                     gevent.sleep(dead_time)
                 n += 1
-        self.run_status = RunStatus.IDLE
+        self._run_status = RunStatus.IDLE
 
     def start(self):
         ctrl_port = self['ctrl_port']
