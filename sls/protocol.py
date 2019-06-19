@@ -15,11 +15,11 @@ CommandCode = enum.IntEnum('CommandCode', start=0, names=[
     'GET_ERROR',
 
     # configuration  functions
-    'GET_DETECTOR_TYPE',
-    'SET_NUMBER_OF_MODULES',
+    'DETECTOR_TYPE',
+    'NB_MODULES',
     'GET_MAX_NUMBER_OF_MODULES',
-    'SET_EXTERNAL_SIGNAL_FLAG',
-    'SET_EXTERNAL_COMMUNICATION_MODE',
+    'EXTERNAL_SIGNAL',
+    'EXTERNAL_COMMUNICATION_MODE',
 
     # Tests and identification
 
@@ -49,7 +49,7 @@ CommandCode = enum.IntEnum('CommandCode', start=0, names=[
     'GET_MODULE',
     'SET_ALL_MODULES',
 
-    'SET_SETTINGS',
+    'SETTINGS',
     'GET_ENERGY_THRESHOLD',
     'SET_ENERGY_THRESHOLD',
 
@@ -57,20 +57,20 @@ CommandCode = enum.IntEnum('CommandCode', start=0, names=[
     'START_ACQUISITION',
     'STOP_ACQUISITION',
     'START_READOUT',
-    'GET_RUN_STATUS',
+    'RUN_STATUS',
     'START_AND_READ_ALL',
     'READ_FRAME',
     'READ_ALL',
 
     # Acquisition setup functions
     'TIMER',
-    'GET_TIME_LEFT',
+    'TIME_LEFT',
 
-    'SET_DYNAMIC_RANGE',
-    'SET_READOUT_FLAGS',
+    'DYNAMIC_RANGE',
+    'READOUT_FLAGS',
     'SET_ROI',
 
-    'SET_SPEED',
+    'SPEED',
 
     # Trimming
     'EXECUTE_TRIMMING',
@@ -89,9 +89,9 @@ CommandCode = enum.IntEnum('CommandCode', start=0, names=[
 
     # multi detector structures
 
-    'SET_MASTER',
+    'MASTER_MODE',
 
-    'SET_SYNCHRONIZATION_MODE',
+    'SYNCHRONIZATION_MODE',
 
     'READ_COUNTER_BLOCK',
 
@@ -163,6 +163,16 @@ TimerType = enum.IntEnum('TimerType', start=0, names=[
     'MEASUREMENTS_NUMBER'
 ])
 
+
+SpeedType = enum.IntEnum('SpeedType', start=0, names=[
+    'CLOCK_DIVIDER',
+    'WAIT_STATES',
+    'TOT_CLOCK_DIVIDER',
+    'TOT_DUTY_CYCLE',
+    'SET_SIGNAL_LENGTH'
+])
+
+
 RunStatus = enum.IntEnum('RunStatus', start=0, names=[
     'IDLE',         # detector ready to start acquisition - no data in memory
     'ERROR',        # error i.e. normally fifo full
@@ -173,18 +183,24 @@ RunStatus = enum.IntEnum('RunStatus', start=0, names=[
 ])
 
 
-Master = enum.IntEnum('Master', start=0, names=[
+MasterMode = enum.IntEnum('MasterMode', start=0, names=[
     'NO_MASTER',
     'IS_MASTER',
     'IS_SLAVE'
 ])
 
 
-SyncronizationMode = enum.IntEnum('SynchronizationMode', start=0, names=[
+SynchronizationMode = enum.IntEnum('SynchronizationMode', start=0, names=[
     'NO_SYNCHRONIZATION',
     'MASTER_GATES',
     'MASTER_TRIGGERS',
     'SLAVE_STARTS_WHEN_MASTER_STOPS'
+])
+
+
+Dimension = enum.IntEnum('Dimension', start=0, names=[
+    'X',
+    'Y'
 ])
 
 
@@ -200,6 +216,37 @@ class ReadoutFlag(enum.IntFlag):
     TOT_MODE = 0x2000                # pump-probe mode
     CONTINOUS_RO = 0x4000            # pump-probe mode
 
+
+ExternalCommunicationMode = enum.IntEnum('ExternalCommunicationMode', start=0, names=[
+    'AUTO_TIMING',              # internal timing
+    'TRIGGER_EXPOSURE',         # trigger mode i.e. exposure is triggered
+    'TRIGGER_FRAME',            # each trigger triggers one frame at a time
+    'TRIGGER_READOUT',          # stop trigger mode i.e. readout is triggered by external signal
+    'GATE_FIX_NUMBER',          # gated and reads out after a fixed number of gates
+    'GATE_WITH_START_TRIGGER',  # gated with start trigger
+    'TRIGGER_WINDOW'            # exposure time coincides with the external signal
+])
+
+
+ExternalSignal = enum.IntEnum('ExternalSignal', start=0, names=[
+    'SIGNAL_OFF',                   # signal unused - tristate
+    'GATE_IN_ACTIVE_HIGH',          # input gate active high
+    'GATE_IN_ACTIVE_LOW',           # input gate active low
+    'TRIGGER_IN_RISING_EDGE',       # input exposure trigger on rising edge
+    'TRIGGER_IN_FALLING_EDGE',      # input exposure trigger on falling edge
+    'RO_TRIGGER_IN_RISING_EDGE',    # input raedout trigger on rising edge
+    'RO_TRIGGER_IN_FALLING_EDGE',   # input readout trigger on falling edge
+    'GATE_OUT_ACTIVE_HIGH',         # output active high when detector is exposing
+    'GATE_OUT_ACTIVE_LOW',          # output active low when detector is exposing
+    'TRIGGER_OUT_RISING_EDGE',      # output trigger rising edge at start of exposure
+    'TRIGGER_OUT_FALLING_EDGE',     # output trigger falling edge at start of exposure
+    'RO_TRIGGER_OUT_RISING_EDGE',   # output trigger rising edge at start of readout
+    'RO_TRIGGER_OUT_FALLING_EDGE',  # output trigger falling edge at start of readout
+    'OUTPUT_LOW',                   # output always low
+    'OUTPUT_HIGH',                  # output always high
+    'MASTER_SLAVE_SYNCHRONIZATION'  # reserved for master/slave synchronization
+                                    # in multi detector systems
+])
 
 def read_format(conn, fmt):
     n = struct.calcsize(fmt)
@@ -268,7 +315,7 @@ def update_client(conn):
 
 
 def get_detector_type(conn):
-    request = struct.pack('<i', CommandCode.GET_DETECTOR_TYPE)
+    request = struct.pack('<i', CommandCode.DETECTOR_TYPE)
     result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, DetectorType(reply[0])
 
@@ -280,42 +327,58 @@ def get_module(conn, mod_nb):
                 serial_nb=reply[1],
                 nb_channels=reply[2],
                 nb_chips=reply[3],
-                nb_dac=reply[4],
-                nb_adc=reply[5],
+                nb_dacs=reply[4],
+                nb_adcs=reply[5],
                 register=reply[6])
-    if info['nb_dac']:
-        info['dacs'] = conn.read_format('<{}i'.format(info['nb_dac']))
+    if info['nb_dacs']:
+        info['dacs'] = read_format(conn, '<{}i'.format(info['nb_dacs']))
     else:
         info['dacs'] = None
-    if info['nb_adc']:
-        info['adcs'] = conn.read_format('<{}i'.format(info['nb_adc']))
+    if info['nb_adcs']:
+        info['adcs'] = read_format(conn, '<{}i'.format(info['nb_adcs']))
     else:
         info['adcs'] = None
     if info['nb_chips']:
         fmt = '<{}i'.format(info['nb_chips'])
-        info['chip_registers'] = conn.read_format(fmt)
+        info['chip_registers'] = read_format(conn, fmt)
     else:
         info['chip_registers'] = []
     if info['nb_channels']:
         fmt = '<{}i'.format(info['nb_channels'])
-        info['channel_registers'] = conn.read_format(fmt)
+        info['channel_registers'] = read_format(conn, fmt)
     else:
         info['channel_registers'] = []
-    info['gain'], info['offset'] = conn.read_format('<dd')
+    info['gain'], info['offset'] = read_format(conn, '<dd')
     return result, info
 
 
-def get_id(conn, mode, mod_nb=GET_CODE):
+def get_id(conn, mode, mod_nb=None):
     assert isinstance(mode, IdParam)
-    request = struct.pack('<ii', CommandCode.GET_ID, mode)
+    if mode == IdParam.MODULE_SERIAL_NUMBER:
+        request = struct.pack('<iii', CommandCode.GET_ID, mode, mod_nb)
+    else:
+        request = struct.pack('<ii', CommandCode.GET_ID, mode)
     result, reply = request_reply(conn, request, reply_fmt='<q')
     return result, reply[0]
 
 
 def get_settings(conn, mod_nb):
-    request = struct.pack('<iii', CommandCode.SET_SETTINGS, GET_CODE, mod_nb)
+    request = struct.pack('<iii', CommandCode.SETTINGS, GET_CODE, mod_nb)
     result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, DetectorSettings(reply[0])
+
+
+def _settings(conn, mod_nb=0, value=GET_CODE):
+    assert value == GET_CODE or isinstance(value, DetectorSettings)
+    request = struct.pack('<iii', CommandCode.SETTINGS, value, mod_nb)
+    result, reply = request_reply(conn, request, reply_fmt='<i')
+    return result, DetectorSettings(reply[0])
+
+def get_settings(conn, mod_nb=0):
+    return _settings(conn, mod_nb)
+
+def set_settings(conn, mod_nb, value):
+    return _settings(conn, mod_nb, value)
 
 
 def get_energy_threshold(conn, mod_nb):
@@ -332,7 +395,7 @@ def set_energy_threshold(conn, mod_nb, energy, settings):
 
 def get_time_left(conn, timer):
     assert isinstance(timer, TimerType)
-    request = struct.pack('<ii', CommandCode.GET_TIME_LEFT, timer)
+    request = struct.pack('<ii', CommandCode.TIME_LEFT, timer)
     result, reply = request_reply(conn, request, reply_fmt='<q')
     value = reply[0]
     if timer in (TimerType.ACQUISITION_TIME, TimerType.FRAME_PERIOD,
@@ -363,32 +426,110 @@ def set_timer(conn, timer, value):
     return _timer(conn, timer, value)
 
 
-def _synchronization(conn, value=GET_CODE):
-    request = struct.pack('<ii', CommandCode.SET_SYNCHRONIZATION_MODE, value)
+def _speed(conn, speed, value=GET_CODE):
+    assert isinstance(speed, SpeedType)
+    request = struct.pack('<iii', CommandCode.SPEED, speed, value)
+    result, reply = request_reply(conn, request, reply_fmt='<q')
+    return result, reply[0]
+
+def get_speed(conn, speed):
+    return _speed(conn, speed)
+
+def set_speed(conn, speed, value):
+    return _speed(conn, speed, value)
+
+
+def _dynamic_range(conn, value=GET_CODE):
+    request = struct.pack('<ii', CommandCode.DYNAMIC_RANGE, value)
     result, reply = request_reply(conn, request, reply_fmt='<i')
-    return result, SyncronizationMode(reply[0])
+    return result, reply[0]
 
-def get_synchronization(conn):
-    return _synchronization(conn)
+def get_dynamic_range(conn):
+    return _dynamic_range(conn)
 
-def set_synchronization(conn, value):
-    return _synchronization(conn, value)
+def set_dynamic_range(conn, value):
+    return _dynamic_range(conn, value)
 
 
-def _master(conn, value=GET_CODE):
-    request = struct.pack('<ii', CommandCode.SET_MASTER, value)
+def _lock_server(conn, value=GET_CODE):
+    request = struct.pack('<ii', CommandCode.LOCK_SERVER, value)
     result, reply = request_reply(conn, request, reply_fmt='<i')
-    return result, Master(reply[0])
+    return result, reply[0]
 
-def get_master(conn):
-    return _master(conn)
+def get_lock_server(conn):
+    return _lock_server(conn)
 
-def set_master(conn, master):
-    return _master(conn, master)
+def set_lock_server(conn, value):
+    return _lock_server(conn, value)
+
+
+def _external_communication_mode(conn, value=GET_CODE):
+    assert value == GET_CODE or isinstance(value, ExternalCommunicationMode)
+    request = struct.pack('<ii', CommandCode.EXTERNAL_COMMUNICATION_MODE, value)
+    result, reply = request_reply(conn, request, reply_fmt='<i')
+    return result, reply[0]
+
+def get_external_communication_mode(conn):
+    return _external_communication_mode(conn)
+
+def set_external_communication_mode(conn, value):
+    return _external_communication_mode(conn, value)
+
+
+def _external_signal(conn, index=-1, value=GET_CODE):
+    assert value == GET_CODE or isinstance(value, ExternalSignal)
+    request = struct.pack('<iii', CommandCode.EXTERNAL_SIGNAL, index, value)
+    result, reply = request_reply(conn, request, reply_fmt='<i')
+    return result, reply[0]
+
+def get_external_signal(conn, index=-1):
+    return _external_signal(conn, index)
+
+def set_external_signal(conn, index, value):
+    return _external_signal(conn, index, value)
+
+
+def _synchronization_mode(conn, value=GET_CODE):
+    assert value == GET_CODE or isinstance(value, SynchronizationMode)
+    request = struct.pack('<ii', CommandCode.SYNCHRONIZATION_MODE, value)
+    result, reply = request_reply(conn, request, reply_fmt='<i')
+    return result, SynchronizationMode(reply[0])
+
+def get_synchronization_mode(conn):
+    return _synchronization_mode(conn)
+
+def set_synchronization_mode(conn, value):
+    return _synchronization_mode(conn, value)
+
+
+def _nb_modules(conn, value=GET_CODE, dimension=Dimension.X):
+    request = struct.pack('<iii', CommandCode.NB_MODULES, value, dimension)
+    result, reply = request_reply(conn, request, reply_fmt='<i')
+    return result, reply[0]
+
+def get_nb_modules(conn, dimension=Dimension.X):
+    return _nb_modules(conn, dimension)
+
+def set_nb_modules(conn, value, dimension=Dimension.X):
+    return _nb_modules(conn, value, dimension)
+
+
+def _master_mode(conn, value=GET_CODE):
+    assert value == GET_CODE or isinstance(value, MasterMode)
+    request = struct.pack('<ii', CommandCode.MASTER_MODE, value)
+    result, reply = request_reply(conn, request, reply_fmt='<i')
+    return result, MasterMode(reply[0])
+
+def get_master_mode(conn):
+    return _master_mode(conn)
+
+def set_master_mode(conn, master):
+    return _master_mode(conn, master)
 
 
 def _readout(conn, value=GET_CODE):
-    request = struct.pack('<ii', CommandCode.SET_READOUT_FLAGS, value)
+    assert value == GET_CODE or isinstance(value, ReadoutFlag)
+    request = struct.pack('<ii', CommandCode.READOUT_FLAGS, value)
     result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, ReadoutFlag(reply[0])
 
@@ -414,7 +555,7 @@ def get_rois(conn):
 
 def start_acquisition(conn):
     request = struct.pack('<i', CommandCode.START_ACQUISITION)
-    result, reply = request_reply(conn, request, reply_fmt=None)
+    return request_reply(conn, request, reply_fmt=None)
 
 
 def start_and_read_all(conn, frame_size):
@@ -438,11 +579,11 @@ def start_and_read_all(conn, frame_size):
 
 
 def get_run_status(stop_conn):
-    request = struct.pack('<i', CommandCode.GET_RUN_STATUS)
+    request = struct.pack('<i', CommandCode.RUN_STATUS)
     result, reply = request_reply(stop_conn, request, reply_fmt='<i')
     return result, RunStatus(reply[0])
 
 
 def stop_acquisition(stop_conn):
     request = struct.pack('<i', CommandCode.STOP_ACQUISITION)
-    result, reply = request_reply(stop_conn, request, reply_fmt=None)
+    return request_reply(stop_conn, request, reply_fmt=None)

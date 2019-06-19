@@ -1,3 +1,4 @@
+import os
 import struct
 import logging
 import functools
@@ -7,27 +8,53 @@ import gevent.server
 
 from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, INET_TEMPLATE,
                        GET_CODE,
-                       ResultType, CommandCode, DetectorSettings,
-                       DetectorType, TimerType, RunStatus,
+                       IdParam, ResultType, CommandCode, DetectorSettings,
+                       DetectorType, TimerType, SpeedType,
+                       SynchronizationMode, MasterMode,
+                       ExternalCommunicationMode, ExternalSignal,
+                       RunStatus, Dimension, ReadoutFlag,
                        read_command, read_i32, read_i64)
 
 log = logging.getLogger('SLSServer')
 
 DEFAULT_DETECTOR_CONFIG = {
-    DetectorType.MYTHEN: dict(nb_mods_x=6, nb_mods_y=1,
-                              nb_channels_x=128, nb_channels_y=1,
-                              nb_chips_x=10, nb_chips_y=1,
-                              nb_dacs=6, nb_adcs=0, dynamic_range=24,
-                              energy_threshold=-100,
-                              nb_frames=0,
-                              acquisition_time=int(1e9),
-                              frame_period=0,
-                              delay_after_trigger=0,
-                              nb_gates=0,
-                              nb_probes=0,
-                              nb_cycles=0,
-                              settings=DetectorSettings.STANDARD,
-                              type=DetectorType.MYTHEN)
+    DetectorType.MYTHEN: dict(
+        module_firmware_version=0x543543,
+        detector_serial_number=0x66778899,
+        detector_firmware_version=0xa943f9,
+        detector_software_version=0x1c7e94,
+        receiver_version=0,
+        nb_modules_x=6, nb_modules_y=1,
+        nb_channels_x=128, nb_channels_y=1,
+        nb_chips_x=10, nb_chips_y=1,
+        nb_dacs=6, nb_adcs=0, dynamic_range=24,
+        energy_threshold=-100,
+        nb_frames=0,
+        acquisition_time=int(1e9),
+        frame_period=0,
+        delay_after_trigger=0,
+        nb_gates=0,
+        nb_probes=0,
+        nb_cycles=0,
+        settings=DetectorSettings.STANDARD,
+        type=DetectorType.MYTHEN,
+        clock_divider=1,
+        wait_states=1,
+        tot_clock_divider=1,
+        tot_duty_cycle=1,
+        set_signal_length=1,
+        external_communication_mode=ExternalCommunicationMode.AUTO_TIMING,
+        external_signal=ExternalSignal.SIGNAL_OFF,
+        external_signals=4*[ExternalSignal.SIGNAL_OFF],
+        synchronization_mode=SynchronizationMode.NO_SYNCHRONIZATION,
+        master_mode=MasterMode.NO_MASTER,
+        readout_flags=ReadoutFlag.NORMAL_READOUT,
+        modules=[dict(id=i, serial_nb=1000+i, nb_channels=128,
+                      nb_chips=10, nb_dacs=6, nb_adcs=0, register=0,
+                      settings=DetectorSettings.STANDARD, gain=0,
+                      offset=0)
+                 for i in range(6)]
+    )
 }
 
 
@@ -38,6 +65,7 @@ def sanitize_config(config):
     result = dict(DEFAULT_DETECTOR_CONFIG[dtype])
     result.update(config)
     result['settings'] = DetectorSettings(result['settings'])
+    result['lock_server'] = 0
     return result
 
 
@@ -45,8 +73,11 @@ class Detector:
 
     def __init__(self, config):
         self.config = config
-        self.run_status = RunStatus.IDLE
+        self._run_status = RunStatus.IDLE
         self.last_client = (None, 0)
+        self.servers = []
+        self.log = log.getChild('{}({})'.format(type(self).__name__,
+                                                config['name']))
 
     def __getitem__(self, name):
         if isinstance(name, str):
@@ -67,8 +98,8 @@ class Detector:
         return self.last_client[0] or '0.0.0.0'
 
     @property
-    def nb_modules(self):
-        return self.config['nb_mods_x'] * self.config['nb_mods_y']
+    def nb_mods(self):
+        return self.config['nb_modules_x'] * self.config['nb_modules_y']
 
     @property
     def nb_chips(self):
@@ -82,17 +113,17 @@ class Detector:
     def data_bytes(self):
         drange = self['dynamic_range']
         drangeb = 4 if drange == 24 else int(drange/8)
-        return self.nb_modules * self.nb_chips * self.nb_channels * drangeb
+        return self.nb_mods * self.nb_chips * self.nb_channels * drangeb
 
     def handle_ctrl(self, sock, addr):
-        log.debug('connected to control %r', addr)
+        self.log.debug('connected to control %r', addr)
         try:
             self._handle_ctrl(sock, addr)
         except ConnectionError:
-            log.warning('unpolite client disconnected from control %r', addr)
+            self.log.debug('unpolite client disconnected from control %r', addr)
         except:
-            log.exception('error handling control request from %r', addr)
-        log.debug('finished control %r', addr)
+            self.log.exception('error handling control request from %r', addr)
+        self.log.debug('finished control %r', addr)
 
     def _handle_ctrl(self, sock, addr):
         conn = sock.makefile(mode='rwb')
@@ -102,9 +133,14 @@ class Detector:
             result_type = ResultType.FORCE_UPDATE
         cmd = read_command(conn)
         cmd_lower = cmd.name.lower()
-        log.info('control request: %s', cmd)
-        func = getattr(self, cmd_lower)
-        result = func(conn, addr)
+        self.log.info('control request: %s', cmd)
+        try:
+            func = getattr(self, cmd_lower)
+            result = func(conn, addr)
+        except Exception as e:
+            result_type = ResultType.FAIL
+            result = '{}: {}'.format(type(e).__name__, e).encode('ascii')
+            self.log.exception('error handling control request from %r', addr)
         # result == None => function handles all replies
         if result is not None:
             sock.sendall(struct.pack('<i', result_type))
@@ -112,23 +148,28 @@ class Detector:
         sock.close()
 
     def handle_stop(self, sock, addr):
-        log.debug('connected to stop %r', addr)
+        self.log.debug('connected to stop %r', addr)
         try:
             self._handle_stop(sock, addr)
         except ConnectionError:
-            log.warning('unpolite client disconnected from stop %r', addr)
+            self.log.debug('unpolite client disconnected from stop %r', addr)
         except:
-            log.exception('error handling stop request from %r', addr)
-        log.debug('finished stop %r', addr)
+            self.log.exception('error handling stop request from %r', addr)
+        self.log.debug('finished stop %r', addr)
 
     def _handle_stop(self, sock, addr):
         conn = sock.makefile(mode='rwb')
         result_type = ResultType.OK
         cmd = read_command(conn)
         cmd_lower = cmd.name.lower()
-        log.info('control request: %s', cmd)
-        func = getattr(self, cmd_lower)
-        result = func(conn, addr)
+        self.log.info('stop request: %s', cmd)
+        try:
+            func = getattr(self, cmd_lower)
+            result = func(conn, addr)
+        except Exception as e:
+            result_type = ResultType.FAIL
+            result = '{}: {}'.format(type(e).__name__, e).encode('ascii')
+            self.log.exception('error handling stop request from %r', addr)
         # result == None => function handles all replies
         if result is not None:
             sock.sendall(struct.pack('<i', result_type))
@@ -137,17 +178,52 @@ class Detector:
 
     def stop_acquisition(self, conn, addr):
         conn.write(struct.pack('<i', ResultType.OK))
+        conn.flush()
 
-    def get_run_status(self, conn, addr):
-        return struct.pack('<i', self.run_status)
+    def get_id(self, conn, addr):
+        param = IdParam(read_i32(conn))
+        name = param.name.lower()
+        if name == 'module_serial_number':
+            mod_nb = read_i32(conn)
+            value = self['modules'][mod_nb]['serial_nb']
+            self.log.info('get id %s[%d] = %d', param.name, mod_nb, value)
+        else:
+            value = self[name]
+            self.log.info('get id %s = %d', param.name, value)
 
-    def get_detector_type(self, conn, addr):
+        return struct.pack('<q', value)
+
+    def get_module(self, conn, addr):
+        mod_nb = read_i32(conn)
+        self.log.info('get module[%d]', mod_nb)
+        value = self['modules'][mod_nb]
+        nb_dacs, nb_adcs = value['nb_dacs'], value['nb_adcs']
+        nb_chips, nb_channels = value['nb_chips'], value['nb_channels']
+        result = struct.pack('<iiiiiii', value['id'], value['serial_nb'],
+                             nb_channels, nb_chips,nb_dacs, nb_adcs,
+                             value['register'])
+        if nb_dacs:
+            result += struct.pack('<{}i'.format(nb_dacs), *[0]*nb_dacs)
+        if nb_adcs:
+            result += struct.pack('<{}i'.format(nb_adcs), *[0]*nb_adcs)
+        if nb_chips:
+            result += struct.pack('<{}i'.format(nb_chips), *[0]*nb_chips)
+        if nb_channels:
+            result += struct.pack('<{}i'.format(nb_channels), *[0]*nb_channels)
+        result += struct.pack('<dd', value['gain'], value['offset'])
+        return result
+
+
+    def run_status(self, conn, addr):
+        return struct.pack('<i', self._run_status)
+
+    def detector_type(self, conn, addr):
         return struct.pack('<i', self['type'])
 
     def get_energy_threshold(self, conn, addr):
         mod_nb = read_i32(conn)
         value = self['energy_threshold']
-        log.info('get energy threshold(module=%d) = %d', mod_nb, value)
+        self.log.info('get energy threshold(module=%d) = %d', mod_nb, value)
         return struct.pack('<i', value)
 
     def set_energy_threshold(self, conn, addr):
@@ -155,7 +231,7 @@ class Detector:
         mod_nb = read_i32(conn)
         settings = read_i32(conn)
         self['energy_threshold'] = value
-        log.info('set energy threshold(module=%d, value=%d, settings=%d)',
+        self.log.info('set energy threshold(module=%d, value=%d, settings=%d)',
                  mod_nb, value, settings)
         return struct.pack('<i', self['energy_threshold'])
 
@@ -163,8 +239,8 @@ class Detector:
         result_type = ResultType.OK
         last_client_ip = INET_TEMPLATE.format(self.last_client_ip)
         last_client_ip = last_client_ip.encode('ascii')
-        field_names = ('nb_modules',
-                       'nb_modules', # TODO: don't know what it is
+        field_names = ('nb_mods',
+                       'nb_mods', # TODO: don't know what it is
                        'dynamic_range', 'data_bytes',
                        'settings', 'energy_threshold', 'nb_frames',
                        'acquisition_time', 'frame_period',
@@ -175,15 +251,123 @@ class Detector:
         return struct.pack('<16siiiiiiqqqqqqq', *fields)
 
     def timer(self, conn, addr):
-        param = TimerType(read_i32(conn))
-        name = param.name.lower()
+        timer_type = TimerType(read_i32(conn))
+        name = timer_type.name.lower()
         value = read_i64(conn)
         if value != GET_CODE:
             self[name] = value
         result = self[name]
-        log.info('%s timer %r = %r', 'get' if value == GET_CODE else 'set',
-                 param.name, result)
+        self.log.info('%s timer %r = %r', 'get' if value == GET_CODE else 'set',
+                      timer_type.name, result)
         return struct.pack('<q', result)
+
+    def dynamic_range(self, conn, addr):
+        value = read_i32(conn)
+        if value != GET_CODE:
+            self['dynamic_range'] = value
+        result = self['dynamic_range']
+        self.log.info('%s dynamic range = %r',
+                      'get' if value == GET_CODE else 'set', result)
+        return struct.pack('<i', result)
+
+    def settings(self, conn, addr):
+        value = read_i32(conn)
+        mod_nb = read_i32(conn)
+        if value != GET_CODE:
+            self['modules'][mod_nb]['settings'] = value
+        result = self['modules'][mod_nb]['settings']
+        self.log.info('%s mod_settings[%d] = %r',
+                      'get' if value == GET_CODE else 'set', mod_nb, result)
+        return struct.pack('<i', result)
+
+    def nb_modules(self, conn, addr):
+        dimension = Dimension(read_i32(conn))
+        value = read_i32(conn)
+        name = 'nb_modules_' + dimension.name.lower()
+        if value != GET_CODE:
+            self[name] = value
+        result = self[name]
+        self.log.info('%s nb modules %r = %r',
+                      'get' if value == GET_CODE else 'set', name, result)
+        return struct.pack('<i', result)
+
+    def readout_flags(self, conn, addr):
+        value = read_i32(conn)
+        if value != GET_CODE:
+            value = ReadoutFlag(value)
+            self['readout_flags'] = value
+        result = self['readout_flags']
+        self.log.info('%s readout flags = %r',
+                      'get' if value == GET_CODE else 'set', result)
+        return struct.pack('<i', result)
+
+    def synchronization_mode(self, conn, addr):
+        value = read_i32(conn)
+        if value != GET_CODE:
+            value = SyncronizationMode(value)
+            self['synchronization_mode'] = value
+        result = self['synchronization_mode']
+        self.log.info('%s synchronization mode = %r',
+                      'get' if value == GET_CODE else 'set', result)
+        return struct.pack('<i', result)
+
+    def master_mode(self, conn, addr):
+        value = read_i32(conn)
+        if value != GET_CODE:
+            value = MasterMode(value)
+            self['master_mode'] = value
+        result = self['master_mode']
+        self.log.info('%s master mode = %r',
+                      'get' if value == GET_CODE else 'set', result)
+        return struct.pack('<i', result)
+
+    def external_communication_mode(self, conn, addr):
+        value = read_i32(conn)
+        if value != GET_CODE:
+            value = ExternalCommunicationMode(value)
+            self['external_communication_mode'] = value
+        result = self['external_communication_mode']
+        self.log.info('%s external communication mode = %r',
+                      'get' if value == GET_CODE else 'set', result)
+        return struct.pack('<i', result)
+
+    def external_signal(self, conn, addr):
+        index = read_i32(conn)
+        value = read_i32(conn)
+        global_sig = index == -1
+        if value != GET_CODE:
+            value = ExternalSignal(value)
+            if global_sig:
+                self['external_signal'] = value
+            else:
+                self['external_signals'][index] = value
+        if global_sig:
+            result = self['external_signal']
+        else:
+            result = self['external_signals'][index]
+        self.log.info('%s external signal[%d] = %r',
+                      'get' if value == GET_CODE else 'set', index, result)
+        return struct.pack('<i', result)
+
+    def speed(self, conn, addr):
+        speed = SpeedType(read_i32(conn))
+        name = speed.name.lower()
+        value = read_i32(conn)
+        if value != GET_CODE:
+            self[name] = value
+        result = self[name]
+        self.log.info('%s speed %r = %r', 'get' if value == GET_CODE else 'set',
+                      speed.name, result)
+        return struct.pack('<i', result)
+
+    def lock_server(self, conn, addr):
+        value = read_i32(conn)
+        if value != GET_CODE:
+            self['lock_server'] = value
+        result = self['lock_server']
+        self.log.info('%s lock server = %r',
+                      'get' if value == GET_CODE else 'set', result)
+        return struct.pack('<i', result)
 
     def start_and_read_all(self, conn, addr):
         self.run_status = RunStatus.RUNNING
@@ -202,7 +386,7 @@ class Detector:
                 gevent.sleep(acq_time)
                 data = numpy.full((size,), cycle_index*frame_index+10,
                                   dtype='<i4')
-                log.info('writting cycle #%d, frame #%d',
+                self.log.info('writting cycle #%d, frame #%d',
                          cycle_index, frame_index)
                 buff = struct.pack('<i', ResultType.OK) + data.tobytes()
                 if is_last:
@@ -213,30 +397,102 @@ class Detector:
                 n += 1
         self.run_status = RunStatus.IDLE
 
+    def start(self):
+        ctrl_port = self['ctrl_port']
+        stop_port = self['stop_port']
 
-def run(config):
-    config = sanitize_config(config)
-    ctrl_port = config['ctrl_port']
-    stop_port = config['stop_port']
-    detector = Detector(config)
-    ctrl = gevent.server.StreamServer(('0.0.0.0', ctrl_port),
-                                      detector.handle_ctrl)
-    stop = gevent.server.StreamServer(('0.0.0.0', stop_port),
-                                      detector.handle_stop)
-    tasks = [gevent.spawn(s.serve_forever) for s in [ctrl, stop]]
-    log.info('Ready to accept requests')
-    gevent.joinall(tasks)
-#    server.serve_forever()
+        ctrl = gevent.server.StreamServer(('0.0.0.0', ctrl_port),
+                                          self.handle_ctrl)
+        stop = gevent.server.StreamServer(('0.0.0.0', stop_port),
+                                          self.handle_stop)
+        tasks = [gevent.spawn(s.serve_forever) for s in [ctrl, stop]]
+        self.servers = list(zip([ctrl, stop], tasks))
+        self.log.info('Ready to accept requests')
+        return self.servers
+
+    def stop(self):
+        for server, task in self.servers:
+            server.stop()
+        self.servers = []
+
+    def serve_forever(self):
+        servers = self.start()
+        gevent.joinall([task for _, task in servers])
+
+
+def load_config(filename):
+    if not os.path.exists(filename):
+        raise ValueError('configuration file does not exist')
+    ext = os.path.splitext(filename)[-1]
+    if ext.endswith('toml'):
+        from toml import load
+    elif ext.endswith('yml') or ext.endswith('.yaml'):
+        import yaml
+        def load(fobj):
+            return yaml.load(fobj, Loader=yaml.Loader)
+    elif ext.endswith('json'):
+        from json import load
+    elif ext.endswith('py'):
+        # python only supports a single detector definition
+        def load(fobj):
+            r = {}
+            exec(fobj.read(), None, r)
+            return [r]
+    else:
+        raise NotImplementedError
+    with open(filename)as fobj:
+        return load(fobj)
+
+
+def detectors(config):
+    if isinstance(config, dict):
+        config = [dict(item, name=key)
+                  for key, item in config.items()]
+    return [Detector(sanitize_config(item)) for item in config]
+
+
+def start(detectors):
+    return {detector:detector.start() for detector in detectors}
+
+
+def stop(detectors):
+    for detector in detectors:
+        detector.stop()
+
+
+def serve_forever(detectors):
+    tasks = [task for det, serv_tasks in start(detectors).items()
+             for serv, task in serv_tasks]
+    try:
+        gevent.joinall(tasks)
+    except KeyboardInterrupt:
+        log.info('Ctrl-C pressed. Bailing out')
+    stop(detectors)
+
+
+def run(filename):
+    logging.info('preparing to run...')
+    config = load_config(filename)
+    dets = detectors(config)
+    serve_forever(dets)
 
 
 def main(args=None):
-    fmt = '%(levelname)s %(asctime)-15s %(name)s: %(message)s'
-    logging.basicConfig(format=fmt, level='DEBUG')
-    config = dict(ctrl_port=DEFAULT_CTRL_PORT)
-    try:
-        run(config)
-    except KeyboardInterrupt:
-        log.info('Ctrl-C pressed. Bailing out')
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', help='configuration file',
+                        dest='config_file',
+                        default='./mythen.toml')
+    parser.add_argument('--log-level', help='log level', type=str,
+                        default='INFO',
+                        choices=['DEBUG', 'INFO', 'WARN', 'ERROR'])
+
+    options = parser.parse_args(args)
+
+    log_level = getattr(logging, options.log_level.upper())
+    log_fmt = '%(levelname)s %(asctime)-15s %(name)s: %(message)s'
+    logging.basicConfig(level=log_level, format=log_fmt)
+    run(options.config_file)
 
 
 if __name__ == '__main__':

@@ -88,7 +88,7 @@ class Detector:
         return protocol.update_client(self.conn_ctrl)
 
     @auto_ctrl_connect
-    def get_id(self, mode, mod_nb=-1):
+    def get_id(self, mode, mod_nb=None):
         return protocol.get_id(self.conn_ctrl, mode, mod_nb=mod_nb)
 
     @auto_ctrl_connect
@@ -106,8 +106,10 @@ class Detector:
     synchronization = property(get_synchronization, set_synchronization)
 
     @auto_ctrl_connect
-    def get_type(self):
+    def get_detector_type(self):
         return protocol.get_detector_type(self.conn_ctrl)
+
+    detector_type = property(get_detector_type)
 
     @auto_ctrl_connect
     def get_module(self, mod_nb=0):
@@ -154,14 +156,24 @@ class Detector:
         self.set_timer(TimerType.NB_CYCLES, nb_cycles)
 
     @auto_ctrl_connect
-    def get_master(self):
-        return protocol.get_master(self.conn_ctrl)
+    def get_master_mode(self):
+        return protocol.get_master_mode(self.conn_ctrl)
 
     @auto_ctrl_connect
-    def set_master(self, master):
-        return protocol.set_master(self.conn_ctrl, master)
+    def set_master_mode(self, master_mode):
+        return protocol.set_master_mode(self.conn_ctrl, master_mode)
 
-    master = property(get_master, set_master)
+    master_mode = property(get_master_mode, set_master_mode)
+
+    @auto_ctrl_connect
+    def get_lock_server(self):
+        return protocol.get_lock_server(self.conn_ctrl)
+
+    @auto_ctrl_connect
+    def set_lock_server(self, lock_server):
+        return protocol.set_lock_server(self.conn_ctrl, lock_server)
+
+    lock_server = property(get_lock_server, set_lock_server)
 
     @auto_ctrl_connect
     def get_settings(self, mod_nb):
@@ -175,11 +187,11 @@ class Detector:
 
     @auto_ctrl_connect
     def start_acquisition(self):
-        protocol.start_acquisition(self.conn_ctrl)
+        return protocol.start_acquisition(self.conn_ctrl)
 
     @auto_stop_connect
     def stop_acquisition(self):
-        protocol.stop_acquisition(self.conn_stop)
+        return protocol.stop_acquisition(self.conn_stop)
 
     @auto_ctrl_connect
     def get_readout(self):
