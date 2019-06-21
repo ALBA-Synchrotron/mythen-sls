@@ -386,13 +386,13 @@ class Detector:
             for frame_index in range(nb_frames):
                 is_last = n == (last - 1)
                 gevent.sleep(acq_time)
-                data = numpy.full((size,), cycle_index*frame_index+10,
+                data = numpy.full((size,), (cycle_index+1)*frame_index+10,
                                   dtype='<i4')
-                self.log.info('writting cycle #%d, frame #%d',
-                         cycle_index, frame_index)
                 buff = struct.pack('<i', ResultType.OK) + data.tobytes()
                 if is_last:
                     buff += finished_msg
+                self.log.info('writting cycle #%d, frame #%d (%db)',
+                              cycle_index, frame_index, len(buff))
                 conn.write(buff)
                 if dead_time:
                     gevent.sleep(dead_time)
