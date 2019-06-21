@@ -13,7 +13,7 @@ from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, INET_TEMPLATE,
                        SynchronizationMode, MasterMode,
                        ExternalCommunicationMode, ExternalSignal,
                        RunStatus, Dimension, ReadoutFlag,
-                       read_command, read_i32, read_i64)
+                       read_command, read_format, read_i32, read_i64)
 
 log = logging.getLogger('SLSServer')
 
@@ -215,6 +215,15 @@ class Detector:
         result += struct.pack('<dd', value['gain'], value['offset'])
         return result
 
+    def set_module(self, conn, addr):
+        fields = read_format(conn, '<iiiiiii')
+        mod_nb = fields[0]
+        self.log.info('set module[%d]', mod_nb)
+        nb_channels, nb_chips, nb_dacs, nb_adcs = fields[2:6]
+        module = dict(serial_nb=fields[1],
+                      register=fields[6])
+        #self['modules'][mod_nb] = module
+        return struct.pack('<i', mod_nb)
 
     def run_status(self, conn, addr):
         return struct.pack('<i', self._run_status)
