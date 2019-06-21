@@ -27,7 +27,7 @@ DEFAULT_DETECTOR_CONFIG = {
         nb_modules_x=6, nb_modules_y=1,
         nb_channels_x=128, nb_channels_y=1,
         nb_chips_x=10, nb_chips_y=1,
-        nb_dacs=6, nb_adcs=0, dynamic_range=24,
+        nb_dacs=6, nb_adcs=0, dynamic_range=32, # when dr = 24 put 32 go figure!
         energy_threshold=-100,
         nb_frames=0,
         acquisition_time=int(1e9),
@@ -49,10 +49,10 @@ DEFAULT_DETECTOR_CONFIG = {
         synchronization_mode=SynchronizationMode.NO_SYNCHRONIZATION,
         master_mode=MasterMode.NO_MASTER,
         readout_flags=ReadoutFlag.NORMAL_READOUT,
-        modules=[dict(id=i, serial_nb=1000+i, nb_channels=128,
-                      nb_chips=10, nb_dacs=6, nb_adcs=0, register=0,
+        modules=[dict(id=i, serial_nb=0xEE0+i*1, nb_channels=128,
+                      chips=list(range(i, 10+i)), register=0,
                       settings=DetectorSettings.STANDARD, gain=0,
-                      offset=0)
+                      offset=0, dacs=list(range(i, 6+i)), adcs=[])
                  for i in range(6)]
     )
 }
@@ -197,19 +197,21 @@ class Detector:
         mod_nb = read_i32(conn)
         self.log.info('get module[%d]', mod_nb)
         value = self['modules'][mod_nb]
-        nb_dacs, nb_adcs = value['nb_dacs'], value['nb_adcs']
-        nb_chips, nb_channels = value['nb_chips'], value['nb_channels']
+        dacs, adcs, chips = value['dacs'], value['adcs'], value['chips']
+        channels = value['channels']
+        nb_dacs, nb_adcs, nb_chips = len(dacs), len(adcs), len(chips)
+        nb_channels = len(channels)
         result = struct.pack('<iiiiiii', value['id'], value['serial_nb'],
-                             nb_channels, nb_chips,nb_dacs, nb_adcs,
+                             nb_channels, nb_chips, nb_dacs, nb_adcs,
                              value['register'])
         if nb_dacs:
-            result += struct.pack('<{}i'.format(nb_dacs), *[0]*nb_dacs)
+            result += struct.pack('<{}i'.format(nb_dacs), *dacs)
         if nb_adcs:
-            result += struct.pack('<{}i'.format(nb_adcs), *[0]*nb_adcs)
+            result += struct.pack('<{}i'.format(nb_adcs), *adcs)
         if nb_chips:
-            result += struct.pack('<{}i'.format(nb_chips), *[0]*nb_chips)
+            result += struct.pack('<{}i'.format(nb_chips), *chips)
         if nb_channels:
-            result += struct.pack('<{}i'.format(nb_channels), *[0]*nb_channels)
+            result += struct.pack('<{}i'.format(nb_channels), *channels)
         result += struct.pack('<dd', value['gain'], value['offset'])
         return result
 
