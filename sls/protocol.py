@@ -169,7 +169,7 @@ SpeedType = enum.IntEnum('SpeedType', start=0, names=[
     'WAIT_STATES',
     'TOT_CLOCK_DIVIDER',
     'TOT_DUTY_CYCLE',
-    'SET_SIGNAL_LENGTH'
+    'SIGNAL_LENGTH'
 ])
 
 

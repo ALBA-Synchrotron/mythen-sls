@@ -4,7 +4,7 @@ import functools
 
 from . import protocol
 from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, SLSError,
-                       TimerType, ResultType)
+                       TimerType, SpeedType, ResultType)
 
 class Connection:
 
@@ -208,6 +208,54 @@ class Detector:
         return protocol.get_rois(self.conn_ctrl)
 
     rois = property(get_rois)
+
+    @auto_ctrl_connect
+    def get_speed(self, speed_type):
+        return protocol.get_speed(self.conn_ctrl, speed_type)
+
+    @auto_ctrl_connect
+    def set_speed(self, speed_type, value):
+        return protocol.set_speed(self.conn_ctrl, speed_type, value)
+
+    def get_clock_divider(self):
+        return self.get_speed(SpeedType.CLOCK_DIVIDER)
+
+    def set_clock_divider(self, value)
+        return self.set_speed(SpeedType.CLOCK_DIVIDER, value)
+
+    clock_divider = property(get_clock_divider, set_clock_divider)
+
+    def get_wait_states(self):
+        return self.get_speed(SpeedType.WAIT_STATES)
+
+    def set_wait_states(self, value)
+        return self.set_speed(SpeedType.WAIT_STATES, value)
+
+    wait_states = property(get_wait_states, set_wait_states)
+
+    def get_tot_clock_divider(self):
+        return self.get_speed(SpeedType.TOT_CLOCK_DIVIDER)
+
+    def set_tot_clock_divider(self, value)
+        return self.set_speed(SpeedType.TOT_CLOCK_DIVIDER, value)
+
+    tot_clock_divider = property(get_tot_clock_divider, set_tot_clock_divider)
+
+    def get_tot_duty_cycle(self):
+        return self.get_speed(SpeedType.TOT_DUTY_CYCLE)
+
+    def set_tot_duty_cycle(self, value)
+        return self.set_speed(SpeedType.TOT_DUTY_CYCLE, value)
+
+    tot_duty_cycle = property(get_tot_duty_cycle, set_tot_duty_cycle)
+
+    def get_signal_length(self):
+        return self.get_speed(SpeedType.SIGNAL_LENGTH)
+
+    def set_signal_length(self, value)
+        return self.set_speed(SpeedType.SIGNAL_LENGTH, value)
+
+    signal_length = property(get_signal_length, set_signal_length)
 
 
 if __name__ == '__main__':
