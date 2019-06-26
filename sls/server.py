@@ -1,10 +1,13 @@
 import os
+import time
 import struct
 import logging
 import functools
 
 import numpy
 import scipy.stats
+
+import gevent.queue
 import gevent.server
 
 from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, INET_TEMPLATE,
@@ -82,13 +85,79 @@ def normal(nb_points=1280, scale=1000_000, offset=100):
     return y.astype('<i4')
 
 
+
+class Acquisition:
+
+    def __init__(self, detector):
+        self.detector = detector
+        self.task = None
+        self.frames = gevent.queue.Queue()
+        self.run_status = RunStatus.IDLE
+
+    def prepare(self):
+        detector = self.detector
+        self.params = dict(nb_frames=max(detector['nb_frames'], 1),
+                           nb_cycles=max(detector['nb_cycles'], 1),
+                           acquisition_time=detector['acquisition_time']*1e-9,
+                           dead_time=detector['frame_period']*1e-9,
+                           size=int(self.detector.data_bytes / 4))
+        self.nb_frames_left = self.params['nb_frames'] * self.params['nb_cycles']
+        self.nb_cycles_left = self.params['nb_cycles']
+
+    @property
+    def acquisition_time_left(self):
+        frame_elapsed = time.time() - self.frame_start
+        return self.params['acquisition_time'] - frame_elapsed
+
+    def start(self):
+        self.task = gevent.spawn(self.run)
+
+    def run(self):
+        self.run_status = RunStatus.RUNNING
+        for frames in self.gen_frames():
+            self.frames.put(frames)
+        self.frames.put(None)
+        self.run_status = RunStatus.IDLE
+
+    def gen_frames(self):
+        nb_cycles = self.params['nb_cycles']
+        nb_frames = self.params['nb_frames']
+        acq_time = self.params['acquisition_time']
+        dead_time = self.params['dead_time']
+        size = self.params['size']
+        for cycle_index in range(nb_cycles):
+            for frame_index in range(nb_frames):
+                is_last = self.nb_frames_left == 1
+                self.frame_start = time.time()
+                gevent.sleep(acq_time)
+                data = normal(size, scale=1000_000 * (cycle_index+1)*frame_index)
+                events = [ResultType.OK, data]
+                if is_last:
+                    events.append(ResultType.FINISHED)
+                    events.append(b'acquisition successfully finished')
+                self.detector.log.info('sending frame #%d for cycle #%d',
+                                       frame_index, cycle_index)
+                yield events
+                self.nb_frames_left -= 1
+                if dead_time:
+                    gevent.sleep(dead_time)
+            self.nb_cycles_left -= 1
+
+    def stop(self):
+        if self.task is not None:
+            self.task.kill()
+
+
 class Detector:
 
     def __init__(self, config):
         self.config = config
         self._run_status = RunStatus.IDLE
+        self.acquisition = None
+        self._reset_status
         self.last_client = (None, 0)
         self.servers = []
+        self.start_time = time.time()
         self.log = log.getChild('{}({})'.format(type(self).__name__,
                                                 config['name']))
 
@@ -105,6 +174,17 @@ class Detector:
             self.config[name] = value
         else:
             setattr(self, name, value)
+
+    def _reset_status(self, status):
+        status.update(dict(
+            nb_frames=self['nb_frames'],
+            acquisition_time=self['acquisition_time'],
+            frame_period=self['frame_period'],
+            delay_after_trigger=self['delay_after_trigger'],
+            nb_gates=self['nb_gates'],
+            nb_probes=self['nb_probes'],
+            nb_cycles=self['nb_cycles'],
+        ))
 
     @property
     def client_ip(self):
@@ -152,7 +232,7 @@ class Detector:
             result = func(conn, addr)
         except Exception as e:
             result_type = ResultType.FAIL
-            result = '{}: {}'.format(type(e).__name__, e).encode('ascii')
+            result = '{}: {}\x00'.format(type(e).__name__, e).encode('ascii')
             self.log.exception('error handling control request from %r', addr)
         # result == None => function handles all replies
         if result is not None:
@@ -181,7 +261,7 @@ class Detector:
             result = func(conn, addr)
         except Exception as e:
             result_type = ResultType.FAIL
-            result = '{}: {}'.format(type(e).__name__, e).encode('ascii')
+            result = '{}: {}\x00'.format(type(e).__name__, e).encode('ascii')
             self.log.exception('error handling stop request from %r', addr)
         # result == None => function handles all replies
         if result is not None:
@@ -284,7 +364,10 @@ class Detector:
         value = read_i64(conn)
         if value != GET_CODE:
             self[name] = value
-        result = self[name]
+        if timer_type == TimerType.ACTUAL_TIME:
+            result = int((time.time() - start_time)*1E9)
+        else:
+            result = self[name]
         self.log.info('%s timer %r = %r', 'get' if value == GET_CODE else 'set',
                       timer_type.name, result)
         return struct.pack('<q', result)
@@ -397,32 +480,50 @@ class Detector:
                       'get' if value == GET_CODE else 'set', result)
         return struct.pack('<i', result)
 
+    def time_left(self, conn, addr):
+        timer_type = TimerType(read_i32(conn))
+        name = timer_type.name.lower()
+        if self._run_status == RunStatus.IDLE:
+            result = self[name]
+        elif self._run_status == RunStatus.RUNNING:
+            acq = self.acquisition
+            if timer_type == TimerType.ACQUISITION_TIME:
+                result = int(acq.acquisition_time_left * 1E9)
+            elif timer_type == TimerType.NB_FRAMES:
+                result = acq.nb_frames_left
+            elif timer_type == TimerType.NB_CYCLES:
+                result = acq.nb_cycles_left
+        self.log.info('get time left %r = %r', timer_type.name, result)
+        return struct.pack('<q', result)
+
     def start_and_read_all(self, conn, addr):
+        self.log.info('start acquisition')
         self._run_status = RunStatus.RUNNING
-        nb_cycles = max(self['nb_cycles'], 1)
-        nb_frames = max(self['nb_frames'], 1)
-        acq_time = self['acquisition_time']*1e-9
-        dead_time = self['frame_period']*1e-9
-        size = int(self.data_bytes / 4)
-        finished_msg = struct.pack('<i', ResultType.FINISHED) + \
-                           b'acquisition successfully finished'
-        last = nb_cycles * nb_frames
-        n = 0
-        for cycle_index in range(nb_cycles):
-            for frame_index in range(nb_frames):
-                is_last = n == (last - 1)
-                gevent.sleep(acq_time)
-                data = normal(size, scale=1000_000 * (cycle_index+1)*frame_index)
-                buff = struct.pack('<i', ResultType.OK) + data.tobytes()
-                if is_last:
-                    buff += finished_msg
-                self.log.info('sending frame #%d for cycle #%d',
-                              frame_index, cycle_index)
-                conn.write(buff)
-                if dead_time:
-                    gevent.sleep(dead_time)
-                n += 1
-        self._run_status = RunStatus.IDLE
+        self.acquisition = Acquisition(self)
+        self.acquisition.prepare()
+        self.acquisition.start()
+        try:
+            for frames in self.acquisition.frames:
+                if frames is None:
+                    break
+                events = []
+                for frame in frames:
+                    if isinstance(frame, ResultType):
+                        event = struct.pack('<i', frame)
+                    elif isinstance(frame, bytes):
+                        event = frame
+                    else:
+                        event = frame.tobytes()
+                    events.append(event)
+                try:
+                    conn.write(b''.join(events))
+                except BrokenPipeError:
+                    pass
+        finally:
+            self.acquisition.stop()
+            self.acquisition = None
+            self._run_status = RunStatus.IDLE
+            self.log.info('finished acquisition')
 
     def start(self):
         ctrl_port = self['ctrl_port']
