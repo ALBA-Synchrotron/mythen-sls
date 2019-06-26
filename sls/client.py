@@ -117,9 +117,9 @@ class Detector:
     def get_module(self, mod_nb=0):
         return protocol.get_module(self.conn_ctrl, mod_nb)
 
-    @auto_ctrl_connect
+    @auto_stop_connect
     def get_time_left(self, timer):
-        return protocol.get_time_left(self.conn_ctrl, timer)
+        return protocol.get_time_left(self.conn_stop, timer)
 
     @property
     def exposure_time_left(self):
