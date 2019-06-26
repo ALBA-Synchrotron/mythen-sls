@@ -2,6 +2,8 @@ import socket
 import logging
 import functools
 
+import numpy
+
 from . import protocol
 from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, SLSError,
                        TimerType, SpeedType, ResultType)
@@ -256,6 +258,24 @@ class Detector:
         return self.set_speed(SpeedType.SIGNAL_LENGTH, value)
 
     signal_length = property(get_signal_length, set_signal_length)
+
+
+# bad channels: list of bad channels
+def load_bad_channels(fname):
+    return numpy.loadtxt(fname, dtype=int)
+
+
+def load_angular_conversion(fname):
+    result = {}
+    with open(fname, 'rt') as fobj:
+        for line in fobj:
+            fields = line.split()
+            mod = dict(module=int(fields[1]),
+                       center=float(fields[3]), ecenter=float(fields[5]),
+                       conversion=float(fields[7]), econversion=float(fields[9]),
+                       offset=float(fields[11]), eoffset=float(fields[13]))
+            result[mod['module']] = mod
+    return result
 
 
 if __name__ == '__main__':
