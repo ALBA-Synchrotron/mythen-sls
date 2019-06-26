@@ -4,6 +4,7 @@ import logging
 import functools
 
 import numpy
+import scipy.stats
 import gevent.server
 
 from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, INET_TEMPLATE,
@@ -71,6 +72,14 @@ def sanitize_config(config):
     result['settings'] = DetectorSettings(result['settings'])
     result['lock_server'] = 0
     return result
+
+
+def normal(nb_points=1280, scale=1000_000, offset=100):
+    x = numpy.arange(nb_points)
+    y = scipy.stats.norm.pdf(numpy.arange(nb_points),
+                             loc=int(nb_points / 2),
+                             scale=100) * scale + offset
+    return y.astype('<i4')
 
 
 class Detector:
@@ -399,13 +408,12 @@ class Detector:
             for frame_index in range(nb_frames):
                 is_last = n == (last - 1)
                 gevent.sleep(acq_time)
-                data = numpy.full((size,), (cycle_index+1)*frame_index+10,
-                                  dtype='<i4')
+                data = normal(size, scale=1000_000 * (cycle_index+1)*frame_index)
                 buff = struct.pack('<i', ResultType.OK) + data.tobytes()
                 if is_last:
                     buff += finished_msg
-                self.log.info('writting cycle #%d, frame #%d (%db)',
-                              cycle_index, frame_index, len(buff))
+                self.log.info('sending frame #%d for cycle #%d',
+                              frame_index, cycle_index)
                 conn.write(buff)
                 if dead_time:
                     gevent.sleep(dead_time)
