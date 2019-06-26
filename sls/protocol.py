@@ -157,7 +157,6 @@ TimerType = enum.IntEnum('TimerType', start=0, names=[
     'ACTUAL_TIME',         # Actual time of the detector's internal timer
     'MEASUREMENT_TIME',    # Time of the measurement from the detector (fifo)
     'PROGRESS',            # fraction of measurement elapsed - only get!
-    'MEASUREMENTS_NUMBER'
 ])
 
 
