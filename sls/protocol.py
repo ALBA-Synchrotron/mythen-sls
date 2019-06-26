@@ -77,7 +77,7 @@ CommandCode = enum.IntEnum('CommandCode', start=0, names=[
 
     'EXIT_SERVER',
     'LOCK_SERVER',
-    'GET_LAST_CLIENT_IP',
+    'LAST_CLIENT_IP',
 
     'SET_PORT',
 
@@ -90,11 +90,8 @@ CommandCode = enum.IntEnum('CommandCode', start=0, names=[
     # multi detector structures
 
     'MASTER_MODE',
-
     'SYNCHRONIZATION_MODE',
-
     'READ_COUNTER_BLOCK',
-
     'RESET_COUNTER_BLOCK',
 ])
 
@@ -312,6 +309,12 @@ def update_client(conn):
                 nb_probes=reply[12],
                 nb_cycles=reply[13])
     return result, info
+
+
+def get_last_client_ip(conn):
+    request = struct.pack('<i', CommandCode.LAST_CLIENT_IP)
+    result, reply = request_reply(conn, request, reply_fmt='<16s')
+    return result, reply[0].strip(b'\x00').decode()
 
 
 def get_detector_type(conn):

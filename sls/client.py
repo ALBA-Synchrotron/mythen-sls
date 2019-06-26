@@ -259,6 +259,11 @@ class Detector:
 
     signal_length = property(get_signal_length, set_signal_length)
 
+    @property
+    @auto_ctrl_connect
+    def last_client_ip(self):
+        return protocol.get_last_client_ip(self.conn_ctrl)
+
 
 # bad channels: list of bad channels
 def load_bad_channels(fname):

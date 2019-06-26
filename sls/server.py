@@ -107,7 +107,7 @@ class Detector:
             setattr(self, name, value)
 
     @property
-    def last_client_ip(self):
+    def client_ip(self):
         return self.last_client[0] or '0.0.0.0'
 
     @property
@@ -193,6 +193,10 @@ class Detector:
         conn.write(struct.pack('<i', ResultType.OK))
         conn.flush()
 
+    def last_client_ip(self, conn, addr):
+        ip = INET_TEMPLATE.format(self.client_ip).encode('ascii')
+        return struct.pack('<16s', ip)
+
     def get_id(self, conn, addr):
         param = IdParam(read_i32(conn))
         name = param.name.lower()
@@ -261,7 +265,7 @@ class Detector:
 
     def update_client(self, conn, addr):
         result_type = ResultType.OK
-        last_client_ip = INET_TEMPLATE.format(self.last_client_ip)
+        last_client_ip = INET_TEMPLATE.format(self.client_ip)
         last_client_ip = last_client_ip.encode('ascii')
         field_names = ('nb_mods',
                        'nb_mods', # TODO: don't know what it is
