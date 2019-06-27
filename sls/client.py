@@ -8,6 +8,7 @@ from . import protocol
 from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, SLSError,
                        TimerType, SpeedType, ResultType)
 
+
 class Connection:
 
     def __init__(self, addr):
@@ -79,6 +80,16 @@ class Detector:
                 return reply
         return wrapper
 
+    def gen_auto_ctrl_connect(f):
+        name = f.__name__
+        is_update = name != 'update_client'
+        @functools.wraps(f)
+        def wrapper(self, *args, **kwargs):
+            with self.conn_ctrl:
+                for item in f(self, *args, **kwargs):
+                    yield item
+        return wrapper
+
     def __init__(self, host,
                  ctrl_port=DEFAULT_CTRL_PORT,
                  stop_port=DEFAULT_STOP_PORT):
@@ -125,6 +136,26 @@ class Detector:
     def exposure_time_left(self):
         return self.get_time_left(TimerType.ACQUISITION_TIME)
 
+    @property
+    def cycles_left(self):
+        return self.get_time_left(TimerType.NB_CYCLES)
+
+    @property
+    def frames_left(self):
+        return self.get_time_left(TimerType.NB_FRAMES)
+
+    @property
+    def progress(self):
+        return self.get_time_left(TimerType.PROGRESS)
+
+    @property
+    def measurement_time(self):
+        return self.get_time_left(TimerType.MEASUREMENT_TIME)
+
+    @property
+    def detector_actual_time(self):
+        return self.get_time_left(TimerType.ACTUAL_TIME)
+
     @auto_ctrl_connect
     def set_timer(self, timer, value):
         return protocol.set_timer(self.conn_ctrl, timer, value)
@@ -142,20 +173,36 @@ class Detector:
         self.set_timer(TimerType.ACQUISITION_TIME, exposure_time)
 
     @property
-    def nb_frames(self):
+    def frames(self):
         return self.get_timer(TimerType.NB_FRAMES)
 
-    @nb_frames.setter
-    def nb_frames(self, nb_frames):
+    @frames.setter
+    def frames(self, nb_frames):
         self.set_timer(TimerType.NB_FRAMES, nb_frames)
 
     @property
-    def nb_cycles(self):
+    def cycles(self):
         return self.get_timer(TimerType.NB_CYCLES)
 
-    @nb_cycles.setter
-    def nb_cycles(self, nb_cycles):
+    @cycles.setter
+    def cycles(self, nb_cycles):
         self.set_timer(TimerType.NB_CYCLES, nb_cycles)
+
+    @property
+    def delay_after_trigger(self):
+        return self.get_timer(TimerType.DELAY_AFTER_TRIGGER)
+
+    @delay_after_trigger.setter
+    def delay_after_trigger(self, delay_after_trigger):
+        self.set_timer(TimerType.DELAY_AFTER_TRIGGER, delay_after_trigger)
+
+    @property
+    def frame_period(self):
+        return self.get_timer(TimerType.FRAME_PERIOD)
+
+    @frame_period.setter
+    def frame_period(self, frame_period):
+        self.set_timer(TimerType.FRAME_PERIOD, frame_period)
 
     @auto_ctrl_connect
     def get_master_mode(self):
@@ -166,6 +213,16 @@ class Detector:
         return protocol.set_master_mode(self.conn_ctrl, master_mode)
 
     master_mode = property(get_master_mode, set_master_mode)
+
+    @auto_ctrl_connect
+    def get_dynamic_range(self):
+        return protocol.get_dynamic_range(self.conn_ctrl)
+
+    @auto_ctrl_connect
+    def set_dynamic_range(self, dynamic_range):
+        return protocol.set_dynamic_range(self.conn_ctrl, dynamic_range)
+
+    dynamic_range = property(get_dynamic_range, set_dynamic_range)
 
     @auto_ctrl_connect
     def get_lock_server(self):
@@ -194,6 +251,15 @@ class Detector:
     @auto_stop_connect
     def stop_acquisition(self):
         return protocol.stop_acquisition(self.conn_stop)
+
+    def acquire(self):
+        info = self.update_client()
+        for event in self._start_and_read_all(info['data_bytes']):
+            yield event
+
+    @auto_ctrl_connect
+    def _start_and_read_all(self, frame_size)
+        return protocol.start_and_read_all(self.conn_ctrl, frame_size):
 
     @auto_ctrl_connect
     def get_readout(self):

@@ -1,6 +1,9 @@
 import enum
 import struct
 
+import numpy
+
+
 DEFAULT_CTRL_PORT = 1952
 DEFAULT_STOP_PORT = 1953
 
@@ -401,7 +404,8 @@ def get_time_left(conn, timer):
     result, reply = request_reply(conn, request, reply_fmt='<q')
     value = reply[0]
     if timer in (TimerType.ACQUISITION_TIME, TimerType.FRAME_PERIOD,
-                 TimerType.DELAY_AFTER_TRIGGER):
+                 TimerType.DELAY_AFTER_TRIGGER, TimerType.ACTUAL_TIME,
+                 TimerType.MEASUREMENT_TIME):
         value *= 1E-9
     return result, value
 
