@@ -559,14 +559,13 @@ def get_rois(conn):
     return rois
 
 
-def start_acquisition(conn):
-    request = struct.pack('<i', CommandCode.START_ACQUISITION)
-    return request_reply(conn, request, reply_fmt=None)
-
-
-def start_and_read_all(conn, frame_size):
-    request = struct.pack('<i', CommandCode.START_AND_READ_ALL)
+def read_all(conn, frame_size):
+    request = struct.pack('<i', CommandCode.READ_ALL)
     conn.write(request)
+    return _read_all(conn, frame_size)
+
+
+def _read_all(conn, frame_size):
     while True:
         try:
             result = read_result(conn)
@@ -579,6 +578,23 @@ def start_and_read_all(conn, frame_size):
                 raise SLSError(read_message(conn))
         except ConnectionError:
             break
+
+
+def read_frame(conn, frame_size):
+    request = struct.pack('<i', CommandCode.READ_FRAME)
+    conn.write(request)
+    return read_data(conn, frame_size)
+
+
+def start_acquisition(conn):
+    request = struct.pack('<i', CommandCode.START_ACQUISITION)
+    return request_reply(conn, request, reply_fmt=None)
+
+
+def start_and_read_all(conn, frame_size):
+    request = struct.pack('<i', CommandCode.START_AND_READ_ALL)
+    conn.write(request)
+    return _read_all(conn, frame_size)
 
 
 # STOP Connection -------------------------------------------------------------

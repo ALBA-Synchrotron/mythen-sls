@@ -1,3 +1,16 @@
+"""
+# SLS Mythen:
+  ___ ___ ___ ___ ___ ___
+ |___|___|___|___|___|___|  6 modules
+                 /    \
+                /      \
+               /__    __\
+               |__|..|__|  10 chips
+              /    \
+             /_    _\
+             |_|..|_|  128 channels
+"""
+
 import socket
 import logging
 import functools
@@ -78,16 +91,6 @@ class Detector:
             with self.conn_stop:
                 result, reply = f(self, *args, **kwargs)
                 return reply
-        return wrapper
-
-    def gen_auto_ctrl_connect(f):
-        name = f.__name__
-        is_update = name != 'update_client'
-        @functools.wraps(f)
-        def wrapper(self, *args, **kwargs):
-            with self.conn_ctrl:
-                for item in f(self, *args, **kwargs):
-                    yield item
         return wrapper
 
     def __init__(self, host,
@@ -254,12 +257,24 @@ class Detector:
 
     def acquire(self):
         info = self.update_client()
-        for event in self._start_and_read_all(info['data_bytes']):
-            yield event
+        frame_size = info['data_bytes']
+        with self.conn_ctrl:
+            for event in protocol.start_and_read_all(self.conn_ctrl, frame_size):
+                yield event
 
-    @auto_ctrl_connect
-    def _start_and_read_all(self, frame_size)
-        return protocol.start_and_read_all(self.conn_ctrl, frame_size):
+    def read_all(self):
+        info = self.update_client()
+        frame_size = info['data_bytes']
+        with self.conn_ctrl:
+            for event in protocol.read_all(self.conn_ctrl, frame_size):
+                yield event
+
+    def read_frame(self, frame_size=None):
+        if frame_size is None:
+            info = self.update_client()
+            frame_size = info['data_bytes']
+        with self.conn_ctrl:
+            return protocol.read_frame(self.conn_ctrl, frame_size)
 
     @auto_ctrl_connect
     def get_readout(self):
@@ -329,6 +344,27 @@ class Detector:
     @auto_ctrl_connect
     def last_client_ip(self):
         return protocol.get_last_client_ip(self.conn_ctrl)
+
+
+def _acquire(detector, exposure_time=1, nb_frames=1, nb_cycles=1):
+    detector.exposure_time = exposure_time
+    detector.frames = nb_frames
+    detector.cycles = nb_cycles
+    for frame in detector.acquire():
+        yield frame
+
+
+def acquire(detector, exposure_time=1, nb_frames=1, nb_cycles=1, plot=False):
+    if plot:
+        nb_points = 1280 * 6 #TODO: calculate for specific detector
+        from matplotlib import pyplot
+        line = pyplot.plot(range(nb_points), nb_points*[0])[0]
+    data = []
+    for frame in _acquire(detector, exposure_time, nb_frames, nb_cycles):
+        data.append(frame)
+        if plot:
+            line.set_ydata(frame)
+    return data
 
 
 # bad channels: list of bad channels
