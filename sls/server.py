@@ -125,11 +125,15 @@ class Acquisition:
         acq_time = self.params['acquisition_time']
         dead_time = self.params['dead_time']
         size = self.params['size']
+        start_time = time.time()
+        n = 0
         for cycle_index in range(nb_cycles):
             for frame_index in range(nb_frames):
                 is_last = self.nb_frames_left == 1
                 self.frame_start = time.time()
-                gevent.sleep(acq_time)
+                nap = start_time + (acq_time + dead_time) * n + acq_time - time.time()
+                if nap > 0:
+                    gevent.sleep(nap)
                 data = normal(size, scale=1000_000 * (cycle_index+1)*frame_index)
                 events = [ResultType.OK, data]
                 if is_last:
@@ -141,6 +145,7 @@ class Acquisition:
                 self.nb_frames_left -= 1
                 if dead_time:
                     gevent.sleep(dead_time)
+                n += 1
             self.nb_cycles_left -= 1
 
     def stop(self):
