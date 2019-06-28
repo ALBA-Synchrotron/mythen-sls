@@ -298,14 +298,14 @@ class Detector:
     def get_module(self, conn, addr):
         mod_nb = read_i32(conn)
         self.log.info('get module[%d]', mod_nb)
-        value = self['modules'][mod_nb]
-        dacs, adcs, chips = value['dacs'], value['adcs'], value['chips']
-        channels = value['channels']
+        mod_config = self['modules'][mod_nb]
+        dacs, adcs, chips = mod_config['dacs'], mod_config['adcs'], mod_config['chips']
+        channels = mod_config['channels']
         nb_dacs, nb_adcs, nb_chips = len(dacs), len(adcs), len(chips)
         nb_channels = len(channels)
-        result = struct.pack('<iiiiiii', value['id'], value['serial_nb'],
+        result = struct.pack('<iiiiiii', mod_config['id'], mod_config['serial_nb'],
                              nb_channels, nb_chips, nb_dacs, nb_adcs,
-                             value['register'])
+                             mod_config['register'])
         if nb_dacs:
             result += struct.pack('<{}i'.format(nb_dacs), *dacs)
         if nb_adcs:
@@ -314,7 +314,7 @@ class Detector:
             result += struct.pack('<{}i'.format(nb_chips), *chips)
         if nb_channels:
             result += struct.pack('<{}i'.format(nb_channels), *channels)
-        result += struct.pack('<dd', value['gain'], value['offset'])
+        result += struct.pack('<dd', mod_config['gain'], mod_config['offset'])
         return result
 
     def set_module(self, conn, addr):
@@ -322,9 +322,17 @@ class Detector:
         mod_nb = fields[0]
         self.log.info('set module[%d]', mod_nb)
         nb_channels, nb_chips, nb_dacs, nb_adcs = fields[2:6]
-        module = dict(serial_nb=fields[1],
+        mod = dict(serial_nb=fields[1],
                       register=fields[6])
-        #self['modules'][mod_nb] = module
+        # garbage: don't know why the client sends its private pointers
+        fields = read_format(conn, '<iiii')
+        mod['gain'], mod['offset'] = read_format(conn, '<dd')
+        mod['dacs'] = read_format(conn, '<{}i'.format(nb_dacs)) if nb_dacs else []
+        mod['adcs'] = read_format(conn, '<{}i'.format(nb_adcs)) if nb_adcs else []
+        mod['chips'] = read_format(conn, '<{}i'.format(nb_chips)) if nb_chips else []
+        mod['channels'] = read_format(conn, '<{}i'.format(nb_channels)) if nb_channels else []
+        mod_config = self['modules'][mod_nb]
+        mod_config.update(mod)
         return struct.pack('<i', mod_nb)
 
     def run_status(self, conn, addr):
