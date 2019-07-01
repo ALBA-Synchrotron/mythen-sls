@@ -140,11 +140,11 @@ class Detector:
         return self.get_time_left(TimerType.ACQUISITION_TIME)
 
     @property
-    def cycles_left(self):
+    def nb_cycles_left(self):
         return self.get_time_left(TimerType.NB_CYCLES)
 
     @property
-    def frames_left(self):
+    def nb_frames_left(self):
         return self.get_time_left(TimerType.NB_FRAMES)
 
     @property
@@ -176,19 +176,19 @@ class Detector:
         self.set_timer(TimerType.ACQUISITION_TIME, exposure_time)
 
     @property
-    def frames(self):
+    def nb_frames(self):
         return self.get_timer(TimerType.NB_FRAMES)
 
-    @frames.setter
-    def frames(self, nb_frames):
+    @nb_frames.setter
+    def nb_frames(self, nb_frames):
         self.set_timer(TimerType.NB_FRAMES, nb_frames)
 
     @property
-    def cycles(self):
+    def nb_cycles(self):
         return self.get_timer(TimerType.NB_CYCLES)
 
-    @cycles.setter
-    def cycles(self, nb_cycles):
+    @nb_cycles.setter
+    def nb_cycles(self, nb_cycles):
         self.set_timer(TimerType.NB_CYCLES, nb_cycles)
 
     @property
@@ -348,8 +348,8 @@ class Detector:
 
 def _acquire(detector, exposure_time=1, nb_frames=1, nb_cycles=1):
     detector.exposure_time = exposure_time
-    detector.frames = nb_frames
-    detector.cycles = nb_cycles
+    detector.nb_frames = nb_frames
+    detector.nb_cycles = nb_cycles
     for frame in detector.acquire():
         yield frame
 
