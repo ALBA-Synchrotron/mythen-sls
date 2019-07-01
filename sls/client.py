@@ -258,23 +258,28 @@ class Detector:
     def acquire(self):
         info = self.update_client()
         frame_size = info['data_bytes']
+        dynamic_range = info['dynamic_range']
         with self.conn_ctrl:
-            for event in protocol.start_and_read_all(self.conn_ctrl, frame_size):
+            for event in protocol.start_and_read_all(self.conn_ctrl,
+                                                     frame_size,
+                                                     dynamic_range):
                 yield event
 
     def read_all(self):
         info = self.update_client()
         frame_size = info['data_bytes']
+        dynamic_range = info['dynamic_range']
         with self.conn_ctrl:
-            for event in protocol.read_all(self.conn_ctrl, frame_size):
+            for event in protocol.read_all(self.conn_ctrl, frame_size, dynamic_range):
                 yield event
 
-    def read_frame(self, frame_size=None):
-        if frame_size is None:
+    def read_frame(self, frame_size=None, dynamic_range=None):
+        if frame_size is None or dynamic_range is None:
             info = self.update_client()
-            frame_size = info['data_bytes']
+        frame_size = frame_size or info['data_bytes']
+        dynamic_range = dynamic_range or info['dynamic_range']
         with self.conn_ctrl:
-            return protocol.read_frame(self.conn_ctrl, frame_size)
+            return protocol.read_frame(self.conn_ctrl, frame_size, dynamic_range)
 
     @auto_ctrl_connect
     def get_readout(self):

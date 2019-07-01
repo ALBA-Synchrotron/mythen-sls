@@ -275,14 +275,21 @@ def read_message(conn):
     return conn.recv(1024).decode()
 
 
-def read_data(conn, size):
+def read_data(conn, size, dynamic_range):
     data = conn.read(size)
     data_size = len(data)
     if data_size != size:
         raise SLSError('wrong data size received: ' \
                        'expected {} bytes but got {} bytes'
                        .format(size, data_size))
-    return numpy.frombuffer(data, dtype='<i4')
+    if dynamic_range in (24, 32): # 24/32 bits
+        return numpy.frombuffer(data, dtype='<i4') & 0xFFFFFF # efectively 24bits
+    elif dynamic_range == 16:
+        return numpy.frombuffer(data, dtype='<i2')
+    elif dynamic_range == 8:
+        return numpy.frombuffer(data, dtype='<i1')
+    else:
+        raise ValueError('unsupported dynamic range {!r}'.format(dynamic_range))
 
 
 def request_reply(conn, request, reply_fmt='<i'):
@@ -565,12 +572,12 @@ def read_all(conn, frame_size):
     return _read_all(conn, frame_size)
 
 
-def _read_all(conn, frame_size):
+def _read_all(conn, frame_size, dynamic_range):
     while True:
         try:
             result = read_result(conn)
             if result == ResultType.OK:
-                frame = read_data(conn, frame_size)
+                frame = read_data(conn, frame_size, dynamic_range)
                 yield frame
             elif result == ResultType.FINISHED:
                 raise StopIteration(read_message(conn))
@@ -580,10 +587,10 @@ def _read_all(conn, frame_size):
             break
 
 
-def read_frame(conn, frame_size):
+def read_frame(conn, frame_size, dynamic_range):
     request = struct.pack('<i', CommandCode.READ_FRAME)
     conn.write(request)
-    return read_data(conn, frame_size)
+    return read_data(conn, frame_size, dynamic_range)
 
 
 def start_acquisition(conn):
@@ -591,10 +598,10 @@ def start_acquisition(conn):
     return request_reply(conn, request, reply_fmt=None)
 
 
-def start_and_read_all(conn, frame_size):
+def start_and_read_all(conn, frame_size, dynamic_range):
     request = struct.pack('<i', CommandCode.START_AND_READ_ALL)
     conn.write(request)
-    return _read_all(conn, frame_size)
+    return _read_all(conn, frame_size, dynamic_range)
 
 
 # STOP Connection -------------------------------------------------------------
