@@ -21,6 +21,16 @@ from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, INET_TEMPLATE,
 
 log = logging.getLogger('SLSServer')
 
+
+def build_default_module(nb, serial_nb):
+    return dict(id=nb, serial_nb=serial_nb,
+                settings=DetectorSettings.STANDARD,
+                gain=0, offset=0,
+                dacs=list(range(nb, 6+nb)), adcs=[],
+                chips=[dict(register=0, channels=list(range(nb+idx, 128+nb+idx)))
+                       for idx in range(10)])
+
+
 DEFAULT_DETECTOR_CONFIG = {
     DetectorType.MYTHEN: dict(
         module_firmware_version=0x543543,
@@ -29,6 +39,7 @@ DEFAULT_DETECTOR_CONFIG = {
         detector_software_version=0x1c7e94,
         receiver_version=0,
         nb_modules_x=6, nb_modules_y=1,
+        nb_modules_x_max=6,
         nb_channels_x=128, nb_channels_y=1,
         nb_chips_x=10, nb_chips_y=1,
         nb_dacs=6, nb_adcs=0, dynamic_range=32, # when dr = 24 put 32 go figure!
@@ -56,12 +67,7 @@ DEFAULT_DETECTOR_CONFIG = {
         synchronization_mode=SynchronizationMode.NO_SYNCHRONIZATION,
         master_mode=MasterMode.NO_MASTER,
         readout_flags=ReadoutFlag.NORMAL_READOUT,
-        modules=[dict(id=i, serial_nb=0xEE0+i*1,
-                      channels=list(range(128)),
-                      chips=list(range(i, 10+i)), register=0,
-                      settings=DetectorSettings.STANDARD, gain=0,
-                      offset=0, dacs=list(range(i, 6+i)), adcs=[])
-                 for i in range(6)]
+        modules=[build_default_module(idx, 0xEE0+idx) for idx in range(10)]
     )
 }
 
@@ -300,20 +306,18 @@ class Detector:
         self.log.info('get module[%d]', mod_nb)
         mod_config = self['modules'][mod_nb]
         dacs, adcs, chips = mod_config['dacs'], mod_config['adcs'], mod_config['chips']
-        channels = mod_config['channels']
         nb_dacs, nb_adcs, nb_chips = len(dacs), len(adcs), len(chips)
-        nb_channels = len(channels)
+        nb_channels = sum(len(chip['channels']) for chip in chips)
         result = struct.pack('<iiiiiii', mod_config['id'], mod_config['serial_nb'],
                              nb_channels, nb_chips, nb_dacs, nb_adcs,
-                             mod_config['register'])
+                             mod_config['settings'])
         if nb_dacs:
             result += struct.pack('<{}i'.format(nb_dacs), *dacs)
         if nb_adcs:
             result += struct.pack('<{}i'.format(nb_adcs), *adcs)
-        if nb_chips:
-            result += struct.pack('<{}i'.format(nb_chips), *chips)
-        if nb_channels:
-            result += struct.pack('<{}i'.format(nb_channels), *channels)
+        result += struct.pack('<{}i'.format(nb_chips), *[chip['register'] for chip in chips])
+        result += struct.pack('<{}i'.format(nb_channels),
+                              *[ch for chip in chips for ch in chip['channels']])
         result += struct.pack('<dd', mod_config['gain'], mod_config['offset'])
         return result
 
@@ -322,15 +326,20 @@ class Detector:
         mod_nb = fields[0]
         self.log.info('set module[%d]', mod_nb)
         nb_channels, nb_chips, nb_dacs, nb_adcs = fields[2:6]
-        mod = dict(serial_nb=fields[1],
-                      register=fields[6])
+        mod = dict(id=mod_nb, serial_nb=fields[1], settings=fields[6])
         # garbage: don't know why the client sends its private pointers
         fields = read_format(conn, '<iiii')
         mod['gain'], mod['offset'] = read_format(conn, '<dd')
         mod['dacs'] = read_format(conn, '<{}i'.format(nb_dacs)) if nb_dacs else []
         mod['adcs'] = read_format(conn, '<{}i'.format(nb_adcs)) if nb_adcs else []
-        mod['chips'] = read_format(conn, '<{}i'.format(nb_chips)) if nb_chips else []
-        mod['channels'] = read_format(conn, '<{}i'.format(nb_channels)) if nb_channels else []
+        chip_registers = read_format(conn, '<{}i'.format(nb_chips))
+        channels = read_format(conn, '<{}i'.format(nb_channels))
+        channels_per_chip = nb_channels // nb_chips
+        mod['chips'] = chips = []
+        for idx in range(nb_chips):
+            chip = dict(register=chip_registers[idx],
+                        channels=channels[idx*channels_per_chip:(idx+1)*channels_per_chip])
+            chips.append(chip)
         mod_config = self['modules'][mod_nb]
         mod_config.update(mod)
         return struct.pack('<i', mod_nb)
@@ -360,8 +369,8 @@ class Detector:
         result_type = ResultType.OK
         last_client_ip = INET_TEMPLATE.format(self.client_ip)
         last_client_ip = last_client_ip.encode('ascii')
-        field_names = ('nb_mods',
-                       'nb_mods', # TODO: don't know what it is
+        field_names = ('nb_modules_x',
+                       'nb_modules_x_max',
                        'dynamic_range', 'data_bytes',
                        'settings', 'energy_threshold', 'nb_frames',
                        'acquisition_time', 'frame_period',
