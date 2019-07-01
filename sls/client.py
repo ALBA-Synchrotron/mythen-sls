@@ -377,6 +377,42 @@ def load_bad_channels(fname):
     return numpy.loadtxt(fname, dtype=int)
 
 
+def load_calibration(fname):
+    with open(fname, 'rt') as fobj:
+        data = fobj.read()
+    offset, gain = data.strip().split()
+    return float(offset), float(gain)
+
+
+def load_module_settings(fname, nb_dacs=6, nb_channels=128, nb_chips=10): # noise file?
+    chips = [dict(channels=[], register=None)
+             for index in range(nb_chips)]
+    module = {}
+    with open(fname, 'rt') as fobj:
+        module['dacs'] = dacs = []
+        for dac_idx in range(nb_dacs):
+            name, value = fobj.readline().split()
+            dacs.append(int(value))
+        module['chips'] = chips = []
+        for chip_idx in range(nb_chips):
+            name, value = fobj.readline().split()
+            assert name == 'outBuffEnable'
+            chip_register = int(value)
+            channels = []
+            for channel_idx in range(nb_channels):
+                trim, compen, anen, calen, outcomp, counts = map(int, fobj.readline().split())
+                register = (trim & 0x3F) | (compen << 9) | (anen << 8) | \
+                           (calen << 7) | (outcomp << 10) | (counts << 11)
+                channels.append(register)
+            chips.append(dict(register=chip_register, channels=channels))
+    return module
+
+
+def load_settings(basefname, module_serial_numbers, nb_dacs=6, nb_channels=128, nb_chips=10):
+    return [load_module_settings(basefname + '.' + serial_number, nb_dacs, nb_channels, nb_chips)
+            for serial_number in module_serial_numbers]
+
+
 def load_angular_conversion(fname):
     result = {}
     with open(fname, 'rt') as fobj:
