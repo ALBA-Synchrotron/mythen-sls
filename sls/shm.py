@@ -1,3 +1,13 @@
+"""
+Shared memory reader for the libSlsDetector.so library.
+
+**Only** useful to validate this python library against the libSlsDetector.so.
+
+Must run on the same machine where libSlsDetector.so is being used.
+
+Requires sysv_ipc to be installed.
+"""
+
 import struct
 import ctype
 from ctypes import Structure, c_int, c_int64, c_char, c_double
