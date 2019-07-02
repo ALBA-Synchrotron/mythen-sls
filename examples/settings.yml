@@ -1,0 +1,26 @@
+# example settings: should be kept under version control
+
+host: bl04mythen
+
+angle_conversion:
+  modules:
+  - center: 0
+    center_error: 0
+    conversion: 0
+    conversion_error: 0
+    offset: 0
+    offset_error: 0
+
+calibration:
+  standard:
+    modules:                      # 6 of these
+      - offset: 0
+        gain: 0
+	dacs: [1, 2, 3, 4, 5, 6]
+    	adcs: []
+        chips:                    # 10 of these
+          - register: 0
+            channels:             # 128 of these
+            - 37 0 0 0 0 0
+
+bad_channels: []
