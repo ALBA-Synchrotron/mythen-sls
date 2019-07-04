@@ -17,7 +17,7 @@ calibration:
       - offset: 0
         gain: 0
 	dacs: [1, 2, 3, 4, 5, 6]
-    	adcs: []
+        adcs: []
         chips:                    # 10 of these
           - register: 0
             channels:             # 128 of these

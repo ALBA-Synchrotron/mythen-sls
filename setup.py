@@ -19,7 +19,7 @@ setup_requirements = []
 if TESTING:
     setup_requirements += ['pytest-runner']
 test_requirements = ['pytest', 'pytest-cov']
-extras_requirements = {'simulator': ['gevent']}
+extras_requirements = {'simulator': ['pyyaml', 'gevent', 'scipy']}
 
 setup(
     author="Jose Tiago Macara Coutinho",
