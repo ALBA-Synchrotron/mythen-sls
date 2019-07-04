@@ -83,13 +83,14 @@ def sanitize_config(config):
     return result
 
 
-def normal(nb_points=1280, scale=1000_000, offset=100):
+def normal(nb_points=1280, scale=1000_000, offset=100, width=100, loc=None):
+    if loc is None:
+        # middle
+        loc = int(nb_points / 2)
     x = numpy.arange(nb_points)
-    y = scipy.stats.norm.pdf(numpy.arange(nb_points),
-                             loc=int(nb_points / 2),
-                             scale=100) * scale + offset
+    y = scipy.stats.norm.pdf(numpy.arange(nb_points), loc=loc,
+                             scale=width) * scale + offset
     return y.astype('<i4')
-
 
 
 class Acquisition:
@@ -140,7 +141,11 @@ class Acquisition:
                 nap = start_time + (acq_time + dead_time) * n + acq_time - time.time()
                 if nap > 0:
                     gevent.sleep(nap)
-                data = normal(size, scale=1000_000 * (cycle_index+1)*frame_index)
+                data = normal(size, scale=1_000_000 * (cycle_index+1)*(frame_index+1))
+                data += normal(size, scale=300_000 * (cycle_index+1)*(frame_index+1), loc=800)
+                data += normal(size, scale=50_000 * (cycle_index+1)*(frame_index+1), loc=5000)
+                data += normal(size, scale=800_000 * (cycle_index+1)*(frame_index+1), width=200, loc=6500)
+                data += numpy.random.randint(0, 100, size, '<i4') # noise
                 events = [ResultType.OK, data]
                 if is_last:
                     events.append(ResultType.FINISHED)
