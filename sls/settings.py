@@ -26,6 +26,13 @@ def load(fname):
 # 3. 1 angular conversion file
 # (N is nb of modules. For mythen this is 6)
 
+# To convert from old settings to new:
+# det = Detector('<host>')
+# mod_sn = [det.get_module_serial_number(mod) for mod in range(6)]
+# configurations = ['standard', ]
+# sett = _load(mod_sn, '<base dir>', configurations)
+# save(sett, '<new file>.yml')
+
 def _load_bad_channels(fname):
     return numpy.loadtxt(fname, dtype=int)
 
@@ -62,13 +69,6 @@ def _load_module_settings(fname, nb_dacs=6, nb_channels=128, nb_chips=10): # noi
     return module
 
 
-def _load_all_settings(basefname, module_serial_numbers, nb_dacs=6,
-                       nb_channels=128, nb_chips=10):
-    return [_load_module_settings(basefname + '.' + serial_number, nb_dacs,
-                                  nb_channels, nb_chips)
-            for serial_number in module_serial_numbers]
-
-
 def _load_angular_conversion(fname):
     result = {}
     with open(fname, 'rt') as fobj:
@@ -82,20 +82,19 @@ def _load_angular_conversion(fname):
     return result
 
 
-def _convert(module_serial_numbers, settings_base_dir, settings,
-             bad_channels_filename, angular_conversion_filename):
+
+def _load(module_serial_numbers, settings_base_dir, settings):
     calibration = {}
+    settings_base_dir = pathlib.Path(settings_base_dir)
     for setting in settings:
         modules = []
         for sn in module_serial_numbers:
-            set_fname = os.path.join(settings_base_dir, 'noise.' + sn)
-            calib_fname = os.path.join(settings_base_dir, 'calibration.' + sn)
-            module = _load_module_settings(sfname)
+            sn_str = '{:03x}'.format(sn)[-3:]
+            noise_fname = settings_base_dir.joinpath(setting, 'noise.sn' + sn_str)
+            calib_fname = settings_base_dir.joinpath(setting, 'calibration.sn' + sn_str)
+            module = _load_module_settings(noise_fname)
             module['offset'], module['gain'] = _load_calibration(calib_fname)
             module['serial_number'] = sn
             modules.append(module)
         calibration[setting] = dict(modules=modules)
-    bad_channels = _load_bad_channels(bad_channels_filename)
-    ang_conv = _load_angular_conversion(angular_conversion_filename)
-    return dict(calibration=calibration, angular_conversion=ang_conv,
-                bad_channels=bad_channels)
+    return dict(calibration=calibration)
