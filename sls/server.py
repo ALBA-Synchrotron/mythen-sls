@@ -67,7 +67,7 @@ DEFAULT_DETECTOR_CONFIG = {
         synchronization_mode=SynchronizationMode.NO_SYNCHRONIZATION,
         master_mode=MasterMode.NO_MASTER,
         readout_flags=ReadoutFlag.NORMAL_READOUT,
-        modules=[build_default_module(idx, 0xEE0+idx) for idx in range(10)]
+        modules=[build_default_module(idx, 0xEE0+idx) for idx in range(6)]
     )
 }
 
@@ -296,7 +296,7 @@ class Detector:
     def get_id(self, conn, addr):
         param = IdParam(read_i32(conn))
         name = param.name.lower()
-        if name == 'module_serial_number':
+        if param == IdParam.MODULE_SERIAL_NUMBER:
             mod_nb = read_i32(conn)
             value = self['modules'][mod_nb]['serial_nb']
             self.log.info('get id %s[%d] = %d', param.name, mod_nb, value)
