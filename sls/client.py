@@ -108,7 +108,7 @@ class Detector:
         return protocol.get_id(self.conn_ctrl, mode, mod_nb=mod_nb)
 
     @auto_ctrl_connect
-    def get_energy_threshold(self, mod_nb=0):
+    def get_energy_threshold(self, mod_nb):
         return protocol.get_energy_threshold(self.conn_ctrl, mod_nb)
 
     @auto_ctrl_connect
@@ -128,7 +128,7 @@ class Detector:
     detector_type = property(get_detector_type)
 
     @auto_ctrl_connect
-    def get_module(self, mod_nb=0):
+    def get_module(self, mod_nb):
         return protocol.get_module(self.conn_ctrl, mod_nb)
 
     @auto_stop_connect
