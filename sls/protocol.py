@@ -367,6 +367,7 @@ def get_module(conn, mod_nb):
 def get_id(conn, mode, mod_nb=None):
     assert isinstance(mode, IdParam)
     if mode == IdParam.MODULE_SERIAL_NUMBER:
+        assert mod_nb is not None
         request = struct.pack('<iii', CommandCode.GET_ID, mode, mod_nb)
     else:
         request = struct.pack('<ii', CommandCode.GET_ID, mode)
@@ -516,12 +517,12 @@ def set_synchronization_mode(conn, value):
 
 
 def _nb_modules(conn, value=GET_CODE, dimension=Dimension.X):
-    request = struct.pack('<iii', CommandCode.NB_MODULES, value, dimension)
+    request = struct.pack('<iii', CommandCode.NB_MODULES, dimension, value)
     result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, reply[0]
 
 def get_nb_modules(conn, dimension=Dimension.X):
-    return _nb_modules(conn, dimension)
+    return _nb_modules(conn, dimension=dimension)
 
 def set_nb_modules(conn, value, dimension=Dimension.X):
     return _nb_modules(conn, value, dimension)
