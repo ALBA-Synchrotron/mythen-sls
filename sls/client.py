@@ -19,7 +19,7 @@ import numpy
 
 from . import protocol
 from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, SLSError,
-                       TimerType, SpeedType, ResultType)
+                       IdParam, Dimension, TimerType, SpeedType, ResultType)
 
 
 class Connection:
@@ -104,8 +104,35 @@ class Detector:
         return protocol.update_client(self.conn_ctrl)
 
     @auto_ctrl_connect
+    def get_nb_modules(self, dimension=Dimension.X):
+        return protocol.get_nb_modules(self.conn_ctrl, dimension)
+
+    @auto_ctrl_connect
+    def set_nb_modules(self, n, dimension=Dimension.X):
+        return protocol.set_nb_modules(self.conn_ctrl, n, dimension)
+
+    @auto_ctrl_connect
     def get_id(self, mode, mod_nb=None):
         return protocol.get_id(self.conn_ctrl, mode, mod_nb=mod_nb)
+
+    def get_module_serial_number(self, mod_nb):
+        return self.get_id(IdParam.MODULE_SERIAL_NUMBER, mod_nb)
+
+    @property
+    def firmware_version(self):
+        return self.get_id(IdParam.DETECTOR_FIRMWARE_VERSION)
+
+    @property
+    def serial_number(self):
+        return self.get_id(IdParam.DETECTOR_SERIAL_NUMBER)
+
+    @property
+    def software_version(self):
+        return self.get_id(IdParam.DETECTOR_SOFTWARE_VERSION)
+
+    @property
+    def module_firmware_version(self):
+        return self.get_id(IdParam.MODULE_FIRMWARE_VERSION)
 
     @auto_ctrl_connect
     def get_energy_threshold(self, mod_nb):
