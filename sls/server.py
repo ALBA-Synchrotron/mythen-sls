@@ -134,6 +134,8 @@ class Acquisition:
         size = self.params['size']
         start_time = time.time()
         n = 0
+        half = size//2
+        ri = lambda x, n=200: numpy.random.randint(x-n, x+n)
         for cycle_index in range(nb_cycles):
             for frame_index in range(nb_frames):
                 is_last = self.nb_frames_left == 1
@@ -141,10 +143,11 @@ class Acquisition:
                 nap = start_time + (acq_time + dead_time) * n + acq_time - time.time()
                 if nap > 0:
                     gevent.sleep(nap)
-                data = normal(size, scale=1_000_000 * (cycle_index+1)*(frame_index+1))
-                data += normal(size, scale=300_000 * (cycle_index+1)*(frame_index+1), loc=800)
-                data += normal(size, scale=50_000 * (cycle_index+1)*(frame_index+1), loc=5000)
-                data += normal(size, scale=800_000 * (cycle_index+1)*(frame_index+1), width=200, loc=6500)
+
+                data = normal(size, scale=ri(100_000, 50_000), loc=ri(half))
+                data += normal(size, scale=ri(300_000, 10_000), loc=ri(800))
+                data += normal(size, scale=ri(50_000, 5_000), loc=ri(5000))
+                data += normal(size, scale=ri(500_000, 10_000), loc=ri(6500))
                 data += numpy.random.randint(0, 100, size, '<i4') # noise
                 events = [ResultType.OK, data]
                 if is_last:
