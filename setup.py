@@ -45,6 +45,9 @@ setup(
     keywords='mythen, sls, simulator',
     name='sls',
     packages=find_packages(include=['sls']),
+    package_data={
+        'sls': ['*.ui']
+    },
     setup_requires=setup_requirements,
     test_suite='tests',
     tests_require=test_requirements,

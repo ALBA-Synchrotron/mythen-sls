@@ -1,8 +1,13 @@
+import os
 import time
 import threading
+import pkg_resources
 
+import numpy
 import pyqtgraph
 from pyqtgraph.Qt import QtGui, QtCore, uic
+
+UI_FILENAME = pkg_resources.resource_filename('sls', 'gui.ui')
 
 
 class MythenGUI(QtGui.QMainWindow):
@@ -13,49 +18,27 @@ class MythenGUI(QtGui.QMainWindow):
     def __init__(self, detector):
         super().__init__()
         self.detector = detector
-        panel = QtGui.QWidget()
-        l = QtGui.QHBoxLayout(panel)
-        plot = pyqtgraph.PlotWidget(name='P1')
-        curve = plot.plot()
-        form_l = QtGui.QFormLayout()
-        l.addWidget(plot)
-        l.addLayout(form_l)
-        nb_frames = QtGui.QSpinBox()
-        nb_frames.setValue(10)
-        nb_frames.setMaximum(99999)
-        exp_time = QtGui.QDoubleSpinBox()
-        exp_time.setSuffix(' s')
-        exp_time.setSingleStep(0.05)
-        exp_time.setDecimals(2)
-        exp_time.setValue(0.1)
-        exp_time.setMaximum(1000)
-        exp_time_left = QtGui.QLabel('---')
-        frame_nb = QtGui.QLabel('---')
-        acq = QtGui.QPushButton('acquire')
-        stop = QtGui.QPushButton('stop')
-        acq.clicked.connect(self.start_acquisition)
-        stop.clicked.connect(self.stop_acquisition)
-        form_l.addRow('Nb. frames', nb_frames)
-        form_l.addRow('Exposure time', exp_time)
-        form_l.addRow('Current frame time left', exp_time_left)
-        form_l.addRow('Frames acquired', frame_nb)
-        form_l.addRow(acq)
-        form_l.addRow(stop)
-        self.setWindowTitle('Myhen demo')
-        self.setCentralWidget(panel)
-        self.exposure_time = exp_time
-        self.exposure_time_left = exp_time_left
-        self.nb_frames = nb_frames
-        self.frame_nb = frame_nb
-        self.acq_button = acq
-        self.plot = plot
-        self.curve = curve
+        uic.loadUi(UI_FILENAME, baseinstance=self)
+        self.plot = self.gv.addPlot(title='Current Frame')
+        self.image = pyqtgraph.ImageItem(border='w')
+        view = self.gv.addViewBox()
+        view.addItem(self.image)
+        self.plot.showGrid(x=True, y=True)
+        self.plot.setLabel('left', 'Counts')
+        self.plot.setLabel('bottom', 'Channel')
+        self.curve = self.plot.plot()
+        self.central_widget.layout().insertWidget(0, self.gv, 1)
+        self.acq_button.clicked.connect(self.start_acquisition)
+        self.stop_button.clicked.connect(self.stop_acquisition)
         self.newFrame.connect(self._on_new_frame)
         self.newStats.connect(self._on_new_stats)
 
     def _on_new_frame(self, frame):
-        self.curve.setData(frame['data'])
-        self.frame_nb.setText(str(frame['index']+1))
+        data, index = frame['data'], frame['index']
+        self.curve.setData(data)
+        self.frame_nb.setText(str(index + 1))
+        self.image_data[index, :] = data
+        self.image.setImage(self.image_data)
 
     def _on_new_stats(self, stats):
         self.exposure_time_left.setText('{:4.2f} s'.format(stats['time_left']))
@@ -63,6 +46,7 @@ class MythenGUI(QtGui.QMainWindow):
     def start_acquisition(self):
         self.acq_button.setEnabled(False)
         self.frame_nb.setText('0')
+        self.image_data = numpy.zeros((6*10*128, self.nb_frames.value()), dtype='<i4').T
         self.acq_thread = threading.Thread(target=self._acquire, daemon=True)
         if self.exposure_time.value() > 1:
             self.mon_thread = threading.Thread(target=self._monitor, daemon=True)
