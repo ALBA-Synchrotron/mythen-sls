@@ -121,10 +121,12 @@ class Acquisition:
 
     def run(self):
         self.run_status = RunStatus.RUNNING
-        for frames in self.gen_frames():
-            self.frames.put(frames)
-        self.frames.put(None)
-        self.run_status = RunStatus.IDLE
+        try:
+            for frames in self.gen_frames():
+                self.frames.put(frames)
+        finally:
+            self.frames.put(None)
+            self.run_status = RunStatus.IDLE
 
     def gen_frames(self):
         nb_cycles = self.params['nb_cycles']
@@ -134,7 +136,7 @@ class Acquisition:
         size = self.params['size']
         start_time = time.time()
         n = 0
-        half = size//2
+        half = size // 2
         ri = lambda x, n=200: numpy.random.randint(x-n, x+n)
         for cycle_index in range(nb_cycles):
             for frame_index in range(nb_frames):
@@ -289,6 +291,8 @@ class Detector:
         sock.close()
 
     def stop_acquisition(self, conn, addr):
+        if self.acquisition:
+            self.acquisition.stop()
         conn.write(struct.pack('<i', ResultType.OK))
         conn.flush()
 
@@ -554,6 +558,8 @@ class Detector:
             self.acquisition = None
             self._run_status = RunStatus.IDLE
             self.log.info('finished acquisition')
+            conn.flush()
+            conn.close()
 
     def start(self):
         ctrl_port = self['ctrl_port']
