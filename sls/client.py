@@ -139,14 +139,16 @@ class Detector:
         return protocol.get_energy_threshold(self.conn_ctrl, mod_nb)
 
     @auto_ctrl_connect
-    def get_synchronization(self):
-        return protocol.get_synchronization(self.conn_ctrl)
+    def get_synchronization_mode(self):
+        return protocol.get_synchronization_mode(self.conn_ctrl)
 
     @auto_ctrl_connect
-    def set_synchronization(self, value):
-        return set_synchronization(self.conn_ctrl, value)
+    def set_synchronization_mode(self, value):
+        return protocol.set_synchronization_mode(self.conn_ctrl, value)
 
-    synchronization = property(get_synchronization, set_synchronization)
+    synchronization_mode = property(
+        get_synchronization_mode,
+        set_synchronization_mode)
 
     @auto_ctrl_connect
     def get_detector_type(self):
