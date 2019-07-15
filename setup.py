@@ -19,7 +19,10 @@ setup_requirements = []
 if TESTING:
     setup_requirements += ['pytest-runner']
 test_requirements = ['pytest', 'pytest-cov']
-extras_requirements = {'simulator': ['pyyaml', 'gevent', 'scipy']}
+extras_requirements = {
+    'simulator': ['pyyaml', 'gevent', 'scipy'],
+    'gui': ['pyqtgraph']
+}
 
 setup(
     author="Jose Tiago Macara Coutinho",
@@ -35,7 +38,8 @@ setup(
     description="Mythen SLS detector interface",
     entry_points={
         'console_scripts': [
-            'mythen-simulator = sls.server:main',
+            'sls-gui=sls.gui:main [gui]',
+            'sls-simulator=sls.simulator:main [simulator]'
         ]
     },
     install_requires=requirements,
