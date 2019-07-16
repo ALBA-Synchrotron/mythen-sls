@@ -1,0 +1,7 @@
+[bl04mythen1]
+ctrl_port = 1952
+stop_port = 1953
+
+[bl04mythen2]
+ctrl_port = 1962
+stop_port = 1963
