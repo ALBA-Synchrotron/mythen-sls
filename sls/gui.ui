@@ -6,17 +6,20 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>982</width>
-    <height>600</height>
+    <width>1171</width>
+    <height>504</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>Mythen GUI</string>
+  </property>
+  <property name="windowIcon">
+   <iconset theme="camera-video"/>
   </property>
   <widget class="QWidget" name="central_widget">
    <layout class="QHBoxLayout" name="horizontalLayout" stretch="1,0">
     <item>
-     <widget class="GraphicsLayoutWidget" name="gv"/>
+     <widget class="GraphicsView" name="gv"/>
     </item>
     <item>
      <layout class="QFormLayout" name="formLayout">
@@ -115,7 +118,7 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>GraphicsLayoutWidget</class>
+   <class>GraphicsView</class>
    <extends>QGraphicsView</extends>
    <header>pyqtgraph</header>
   </customwidget>
