@@ -390,13 +390,15 @@ def set_settings(conn, mod_nb, value):
 
 
 def get_energy_threshold(conn, mod_nb):
+    # mod_nb = -1 means ALL
     request = struct.pack('<ii', CommandCode.GET_ENERGY_THRESHOLD, mod_nb)
     result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, reply[0]
 
-def set_energy_threshold(conn, mod_nb, energy, settings):
+def set_energy_threshold(conn, mod_nb, energy):
+    # mod_nb = -1 means ALL
     request = struct.pack('<iiii', CommandCode.SET_ENERGY_THRESHOLD, energy,
-                          mod_nb, settings)
+                          mod_nb, -1)
     result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, reply[0]
 

@@ -139,6 +139,18 @@ class Detector:
         return protocol.get_energy_threshold(self.conn_ctrl, mod_nb)
 
     @auto_ctrl_connect
+    def set_energy_threshold(self, mod_nb, energy):
+        return protocol.set_energy_threshold(self.conn_ctrl, mod_nb, energy)
+
+    @property
+    def energy_threshold(self):
+        return self.get_energy_threshold(-1)
+
+    @energy_threshold.setter
+    def energy_threshold(self, energy):
+        self.set_energy_threshold(-1, energy)
+
+    @auto_ctrl_connect
     def get_synchronization_mode(self):
         return protocol.get_synchronization_mode(self.conn_ctrl)
 
