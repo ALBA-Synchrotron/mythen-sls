@@ -581,7 +581,7 @@ def _read_all(conn, frame_size, dynamic_range):
                 frame = read_data(conn, frame_size, dynamic_range)
                 yield frame
             elif result == ResultType.FINISHED:
-                raise StopIteration(read_message(conn))
+                break
             elif result == ResultType.FAIL:
                 raise SLSError(read_message(conn))
         except ConnectionError:
