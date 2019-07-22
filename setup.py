@@ -40,6 +40,12 @@ setup(
         'console_scripts': [
             'sls-gui=sls.gui:main [gui]',
             'sls-simulator=sls.simulator:main [simulator]'
+        ],
+        'Lima_camera': [
+            'MythenSLS = sls.lima.camera'
+        ],
+        'Lima_tango_camera': [
+            'MythenSLS = sls.lima.tango'
         ]
     },
     install_requires=requirements,

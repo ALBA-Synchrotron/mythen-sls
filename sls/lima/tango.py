@@ -16,4 +16,13 @@ class Mythen(Device):
 
 
 def get_tango_specific_class_n_device():
-    return Mythen.TangoClassClass, Mythen
+    return Mythen
+
+
+def main():
+    import Lima.Server.LimaCCDs
+    Lima.Server.LimaCCDs.main()
+
+
+if __name__ == '__main__':
+    main()
