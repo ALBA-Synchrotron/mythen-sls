@@ -272,7 +272,8 @@ def read_command(conn):
 
 
 def read_message(conn):
-    return conn.recv(1024).decode()
+    message = conn.recv(1024).decode()
+    return message.strip('\x00\n')
 
 
 def read_data(conn, size, dynamic_range):
