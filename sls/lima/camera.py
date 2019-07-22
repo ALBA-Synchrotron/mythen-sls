@@ -234,6 +234,7 @@ def get_options(namespace, enum):
 def main(args=None):
     import argparse
     file_format_options = get_options(CtSaving, CtSaving.FileFormat)
+    breakpoint()
     file_format_suffix = {f: '.{}'.format(f.replace('HDF5', 'h5').replace('Format', '').lower())
                           for f in file_format_options}
     parser = argparse.ArgumentParser()
@@ -244,7 +245,7 @@ def main(args=None):
     parser.add_argument('-e', '--exposure-time',default=0.1, type=float)
     parser.add_argument('-l', '--latency-time', default=0.0, type=float)
     parser.add_argument('-d', '--saving-directory', default=None, type=str)
-    parser.add_argument('-f', '--saving-format', default='EDF', type=str,
+    parser.add_argument('--saving-format', default='EDF', type=str,
                         choices=sorted(file_format_options))
     parser.add_argument('-p', '--saving-prefix', default='image_', type=str)
     parser.add_argument('-s', '--saving-suffix', default='__AUTO_SUFFIX__',
