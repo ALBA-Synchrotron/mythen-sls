@@ -175,18 +175,6 @@ class Interface(HwInterface):
         self._status = Status.Ready
 
 
-def object_configuration(obj):
-    names = (name for name in dir(obj) if name.startswith('get'))
-    result = {}
-    for name in names:
-        func = getattr(obj, name)
-        try:
-            result[name[3:]] = func()
-        except:
-            pass
-    return result
-
-
 def get_control(host, ctrl_port=DEFAULT_CTRL_PORT,
                 stop_port=DEFAULT_STOP_PORT):
     detector = Detector(host, ctrl_port=ctrl_port, stop_port=stop_port)
