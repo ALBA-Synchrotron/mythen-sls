@@ -376,12 +376,6 @@ def get_id(conn, mode, mod_nb=None):
     return result, reply[0]
 
 
-def get_settings(conn, mod_nb):
-    request = struct.pack('<iii', CommandCode.SETTINGS, GET_CODE, mod_nb)
-    result, reply = request_reply(conn, request, reply_fmt='<i')
-    return result, DetectorSettings(reply[0])
-
-
 def _settings(conn, mod_nb=0, value=GET_CODE):
     assert value == GET_CODE or isinstance(value, DetectorSettings)
     request = struct.pack('<iii', CommandCode.SETTINGS, value, mod_nb)
