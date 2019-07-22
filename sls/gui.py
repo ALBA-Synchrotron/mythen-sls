@@ -7,6 +7,9 @@ import numpy
 import pyqtgraph
 from pyqtgraph.Qt import QtGui, QtCore, uic
 
+from sls.client import Detector, SLSError
+
+
 UI_FILENAME = pkg_resources.resource_filename('sls', 'gui.ui')
 
 
@@ -14,9 +17,11 @@ class MythenGUI(QtGui.QMainWindow):
 
     newFrame = QtCore.Signal(object)
     newStats = QtCore.Signal(object)
+    newError = QtCore.Signal(object)
 
     def __init__(self, detector):
         super().__init__()
+        self._stop = False
         self.detector = detector
         uic.loadUi(UI_FILENAME, baseinstance=self)
         layout = pyqtgraph.GraphicsLayout()
@@ -35,6 +40,7 @@ class MythenGUI(QtGui.QMainWindow):
         self.stop_button.clicked.connect(self.stop_acquisition)
         self.newFrame.connect(self._on_new_frame)
         self.newStats.connect(self._on_new_stats)
+        self.newError.connect(self._on_error)
 
     def _on_new_frame(self, frame):
         data, index = frame['data'], frame['index']
@@ -46,7 +52,12 @@ class MythenGUI(QtGui.QMainWindow):
     def _on_new_stats(self, stats):
         self.exposure_time_left.setText('{:4.2f} s'.format(stats['time_left']))
 
+    def _on_error(self, error):
+        msg, err = error
+        QtGui.QMessageBox.warning(None, msg, repr(err))
+
     def start_acquisition(self):
+        self._stop = False
         self.acq_button.setEnabled(False)
         self.frame_nb.setText('0')
         self.image_data = numpy.zeros((6*10*128, self.nb_frames.value()), dtype='<i4').T
@@ -59,18 +70,29 @@ class MythenGUI(QtGui.QMainWindow):
         self.acq_thread.start()
 
     def stop_acquisition(self):
+        self._stop = True
         self.detector.stop_acquisition()
 
     def _acquire(self):
+        try:
+            self.__acquire()
+        except Exception as err:
+            # if there was an error not due to a stop command propagate it
+            if not self._stop:
+                self.newError.emit(('Error during acquisition', err))
+        finally:
+            self._stop = False
+            self.acq_thread = None
+            self.acq_button.setEnabled(True)
+
+    def __acquire(self):
         self.detector.nb_frames = self.nb_frames.value()
         self.detector.exposure_time = self.exposure_time.value()
         for i, frame in enumerate(self.detector.acquire()):
             self.newFrame.emit(dict(data=frame, index=i))
-        self.acq_thread = None
-        self.acq_button.setEnabled(True)
 
     def _monitor(self):
-        while self.acq_thread is not None:
+        while self.acq_thread is not None and not self._stop:
             stats = dict(time_left=self.detector.exposure_time_left)
             self.newStats.emit(stats)
             time.sleep(0.2)
@@ -79,9 +101,8 @@ class MythenGUI(QtGui.QMainWindow):
 
 
 def run(options):
-    import sls.client
     app = QtGui.QApplication([])
-    detector = sls.client.Detector(options.host)
+    detector = Detector(options.host)
     gui = MythenGUI(detector)
     gui.show()
     app.exec_()
