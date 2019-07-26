@@ -276,6 +276,17 @@ def read_message(conn):
     return message.strip('\x00\n')
 
 
+def _to_numpy_meta(nb_bytes, dynamic_range):
+    if dynamic_range in (24, 32): # 24/32 bits
+        return (nb_bytes // 4,), '<i4'
+    elif dynamic_range == 16:
+        return (nb_bytes // 2,), '<i2'
+    elif dynamic_range == 8:
+        return (nb_bytes,), '<i'
+    else:
+        raise ValueError('unsupported dynamic range {!r}'.format(dynamic_range))
+
+
 def read_data(conn, size, dynamic_range):
     data = conn.read(size)
     data_size = len(data)
@@ -283,14 +294,8 @@ def read_data(conn, size, dynamic_range):
         raise SLSError('wrong data size received: ' \
                        'expected {} bytes but got {} bytes'
                        .format(size, data_size))
-    if dynamic_range in (24, 32): # 24/32 bits
-        return numpy.frombuffer(data, dtype='<i4') & 0xFFFFFF # efectively 24bits
-    elif dynamic_range == 16:
-        return numpy.frombuffer(data, dtype='<i2')
-    elif dynamic_range == 8:
-        return numpy.frombuffer(data, dtype='<i1')
-    else:
-        raise ValueError('unsupported dynamic range {!r}'.format(dynamic_range))
+    shape, dtype = _to_numpy_meta(size, dynamic_range)
+    return numpy.frombuffer(data, dtype=dtype)
 
 
 def request_reply(conn, request, reply_fmt='<i'):
