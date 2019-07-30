@@ -24,18 +24,10 @@ class MythenGUI(QtGui.QMainWindow):
         self._stop = False
         self.detector = detector
         uic.loadUi(UI_FILENAME, baseinstance=self)
-        layout = pyqtgraph.GraphicsLayout()
-        self.gv.setCentralItem(layout)
-        self.plot = layout.addPlot(title='Current Frame')
-        self.image = pyqtgraph.ImageItem(border='w')
-        view_box = layout.addViewBox()
-        view_box.addItem(self.image)
-        view_box.enableAutoRange()
         self.plot.showGrid(x=True, y=True)
         self.plot.setLabel('left', 'Counts')
         self.plot.setLabel('bottom', 'Channel')
         self.curve = self.plot.plot()
-        self.central_widget.layout().insertWidget(0, self.gv, 1)
         self.acq_button.clicked.connect(self.start_acquisition)
         self.stop_button.clicked.connect(self.stop_acquisition)
         self.newFrame.connect(self._on_new_frame)
@@ -46,8 +38,6 @@ class MythenGUI(QtGui.QMainWindow):
         data, index = frame['data'], frame['index']
         self.curve.setData(data)
         self.frame_nb.setText(str(index + 1))
-        self.image_data[index, :] = data
-        self.image.setImage(self.image_data)
 
     def _on_new_stats(self, stats):
         self.exposure_time_left.setText('{:4.2f} s'.format(stats['time_left']))
@@ -60,7 +50,6 @@ class MythenGUI(QtGui.QMainWindow):
         self._stop = False
         self.acq_button.setEnabled(False)
         self.frame_nb.setText('0')
-        self.image_data = numpy.zeros((6*10*128, self.nb_frames.value()), dtype='<i4').T
         self.acq_thread = threading.Thread(target=self._acquire, daemon=True)
         if self.exposure_time.value() > 1:
             self.mon_thread = threading.Thread(target=self._monitor, daemon=True)
