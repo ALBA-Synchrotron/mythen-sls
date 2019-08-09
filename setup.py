@@ -21,7 +21,8 @@ if TESTING:
 test_requirements = ['pytest', 'pytest-cov']
 extras_requirements = {
     'simulator': ['pyyaml', 'gevent', 'scipy'],
-    'gui': ['pyqtgraph']
+    'gui': ['pyqtgraph'],
+    'lima': [] # one day lima may be in pypi
 }
 
 setup(
@@ -39,7 +40,8 @@ setup(
     entry_points={
         'console_scripts': [
             'sls-gui=sls.gui:main [gui]',
-            'sls-simulator=sls.simulator:main [simulator]'
+            'sls-simulator=sls.simulator:main [simulator]',
+            'sls-lima-tango-server=sls.lima.tango:main [lima]'
         ],
         'Lima_camera': [
             'MythenSLS = sls.lima.camera'
