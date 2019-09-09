@@ -478,7 +478,7 @@ def _external_communication_mode(conn, value=GET_CODE):
     assert value == GET_CODE or isinstance(value, ExternalCommunicationMode)
     request = struct.pack('<ii', CommandCode.EXTERNAL_COMMUNICATION_MODE, value)
     result, reply = request_reply(conn, request, reply_fmt='<i')
-    return result, reply[0]
+    return result, ExternalCommunicationMode(reply[0])
 
 def get_external_communication_mode(conn):
     return _external_communication_mode(conn)
@@ -491,7 +491,7 @@ def _external_signal(conn, index=-1, value=GET_CODE):
     assert value == GET_CODE or isinstance(value, ExternalSignal)
     request = struct.pack('<iii', CommandCode.EXTERNAL_SIGNAL, index, value)
     result, reply = request_reply(conn, request, reply_fmt='<i')
-    return result, reply[0]
+    return result, ExternalSignal(reply[0])
 
 def get_external_signal(conn, index=-1):
     return _external_signal(conn, index)
