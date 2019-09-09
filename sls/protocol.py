@@ -445,7 +445,7 @@ def set_timer(conn, timer, value):
 def _speed(conn, speed, value=GET_CODE):
     assert isinstance(speed, SpeedType)
     request = struct.pack('<iii', CommandCode.SPEED, speed, value)
-    result, reply = request_reply(conn, request, reply_fmt='<q')
+    result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, reply[0]
 
 def get_speed(conn, speed):
