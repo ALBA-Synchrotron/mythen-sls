@@ -14,12 +14,13 @@
    <string>Mythen GUI</string>
   </property>
   <property name="windowIcon">
-   <iconset theme="camera-video"/>
+   <iconset theme="camera-video">
+    <normaloff>.</normaloff>.</iconset>
   </property>
   <widget class="QWidget" name="central_widget">
    <layout class="QHBoxLayout" name="horizontalLayout" stretch="1,0">
     <item>
-     <widget class="GraphicsView" name="gv"/>
+     <widget class="PlotWidget" name="plot"/>
     </item>
     <item>
      <layout class="QFormLayout" name="formLayout">
@@ -118,7 +119,7 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>GraphicsView</class>
+   <class>PlotWidget</class>
    <extends>QGraphicsView</extends>
    <header>pyqtgraph</header>
   </customwidget>

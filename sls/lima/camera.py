@@ -93,10 +93,10 @@ class DetInfo(HwDetInfoCtrlObj):
         return (1.0, 1.0)
 
     def getDetectorType(self):
-        return "SLS"
+        return "MythenSLS"
 
-    def getDetectorModel():
-        return "Mythen"
+    def getDetectorModel(self):
+        return "Mythen-II"
 
     def registerMaxImageSizeCallback(self, cb):
         pass
