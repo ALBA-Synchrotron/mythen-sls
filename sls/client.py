@@ -71,27 +71,54 @@ class Connection:
         return data
 
 
+def auto_ctrl_connect(f):
+    name = f.__name__
+    is_update = name == 'update_client'
+    @functools.wraps(f)
+    def wrapper(self, *args, **kwargs):
+        with self.conn_ctrl:
+            result, reply = f(self, *args, **kwargs)
+            if result == ResultType.FORCE_UPDATE and not is_update:
+                self.update_client()
+            return reply
+    wrapper.wrapped = True
+    return wrapper
+
+
+def auto_stop_connect(f):
+    @functools.wraps(f)
+    def wrapper(self, *args, **kwargs):
+        with self.conn_stop:
+            result, reply = f(self, *args, **kwargs)
+            return reply
+    return wrapper
+
+
+class auto_property(property):
+
+    wrapper = None
+
+    def __init__(self, fget=None, fset=None, fdel=None, doc=None):
+        if fget is not None and not getattr(fget, 'wrapped', False):
+            fget = self.wrapper(fget)
+        if fset is not None and not getattr(fset, 'wrapped', False):
+            fset = self.wrapper(fset)
+        super().__init__(fget, fset, fdel, doc)
+
+
+class ctrl_property(auto_property):
+
+    def wrapper(self, f):
+        return auto_ctrl_connect(f)
+
+
+class stop_property(auto_property):
+
+    def wrapper(self, f):
+        return auto_stop_connect(f)
+
+
 class Detector:
-
-    def auto_ctrl_connect(f):
-        name = f.__name__
-        is_update = name == 'update_client'
-        @functools.wraps(f)
-        def wrapper(self, *args, **kwargs):
-            with self.conn_ctrl:
-                result, reply = f(self, *args, **kwargs)
-                if result == ResultType.FORCE_UPDATE and not is_update:
-                    self.update_client()
-                return reply
-        return wrapper
-
-    def auto_stop_connect(f):
-        @functools.wraps(f)
-        def wrapper(self, *args, **kwargs):
-            with self.conn_stop:
-                result, reply = f(self, *args, **kwargs)
-                return reply
-        return wrapper
 
     def __init__(self, host,
                  ctrl_port=DEFAULT_CTRL_PORT,
@@ -150,23 +177,35 @@ class Detector:
     def energy_threshold(self, energy):
         self.set_energy_threshold(-1, energy)
 
-    @auto_ctrl_connect
-    def get_synchronization_mode(self):
+    @ctrl_property
+    def synchronization_mode(self):
         return protocol.get_synchronization_mode(self.conn_ctrl)
 
-    @auto_ctrl_connect
-    def set_synchronization_mode(self, value):
+    @synchronization_mode.setter
+    def synchronization_mode(self, value):
         return protocol.set_synchronization_mode(self.conn_ctrl, value)
 
-    synchronization_mode = property(
-        get_synchronization_mode,
-        set_synchronization_mode)
+    @ctrl_property
+    def timing_mode(self):
+        return protocol.get_external_communication_mode(self.conn_ctrl)
 
-    @auto_ctrl_connect
-    def get_detector_type(self):
+    @timing_mode.setter
+    def timing_mode(self, value):
+        return protocol.set_external_communication_mode(self.conn_ctrl, value)
+
+    external_communication_mode = timing_mode
+
+    @ctrl_property
+    def external_signal(self):
+        return protocol.get_external_signal(self.conn_ctrl)
+
+    @external_signal.setter
+    def external_signal(self, value):
+        return protocol.set_external_signal(self.conn_ctrl, value)
+
+    @ctrl_property
+    def detector_type(self):
         return protocol.get_detector_type(self.conn_ctrl)
-
-    detector_type = property(get_detector_type)
 
     @auto_ctrl_connect
     def get_module(self, mod_nb):
@@ -248,25 +287,21 @@ class Detector:
     def frame_period(self, frame_period):
         self.set_timer(TimerType.FRAME_PERIOD, frame_period)
 
-    @auto_ctrl_connect
-    def get_master_mode(self):
+    @ctrl_property
+    def master_mode(self):
         return protocol.get_master_mode(self.conn_ctrl)
 
-    @auto_ctrl_connect
-    def set_master_mode(self, master_mode):
+    @master_mode.setter
+    def master_mode(self, master_mode):
         return protocol.set_master_mode(self.conn_ctrl, master_mode)
 
-    master_mode = property(get_master_mode, set_master_mode)
-
-    @auto_ctrl_connect
-    def get_dynamic_range(self):
+    @ctrl_property
+    def dynamic_range(self):
         return protocol.get_dynamic_range(self.conn_ctrl)
 
-    @auto_ctrl_connect
-    def set_dynamic_range(self, dynamic_range):
+    @dynamic_range.setter
+    def dynamic_range(self, dynamic_range):
         return protocol.set_dynamic_range(self.conn_ctrl, dynamic_range)
-
-    dynamic_range = property(get_dynamic_range, set_dynamic_range)
 
     @auto_ctrl_connect
     def get_lock_server(self):
@@ -282,11 +317,9 @@ class Detector:
     def get_settings(self, mod_nb):
         return protocol.get_settings(self.conn_ctrl, mod_nb)
 
-    @auto_stop_connect
-    def get_run_status(self):
+    @stop_property
+    def run_status(self):
         return protocol.get_run_status(self.conn_stop)
-
-    run_status = property(get_run_status)
 
     @auto_ctrl_connect
     def start_acquisition(self):
@@ -322,21 +355,17 @@ class Detector:
         with self.conn_ctrl:
             return protocol.read_frame(self.conn_ctrl, frame_size, dynamic_range)
 
-    @auto_ctrl_connect
-    def get_readout(self):
+    @ctrl_property
+    def readout(self):
         return protocol.get_readout(self.conn_ctrl)
 
-    @auto_ctrl_connect
-    def set_readout(self, value):
+    @readout.setter
+    def readout(self, value):
         return protocol.set_readout(self.conn_ctrl, value)
 
-    readout = property(get_readout, set_readout)
-
-    @auto_ctrl_connect
-    def get_rois(self):
+    @ctrl_property
+    def rois(self):
         return protocol.get_rois(self.conn_ctrl)
-
-    rois = property(get_rois)
 
     @auto_ctrl_connect
     def get_speed(self, speed_type):
@@ -346,48 +375,47 @@ class Detector:
     def set_speed(self, speed_type, value):
         return protocol.set_speed(self.conn_ctrl, speed_type, value)
 
-    def get_clock_divider(self):
+    @property
+    def clock_divider(self):
         return self.get_speed(SpeedType.CLOCK_DIVIDER)
 
-    def set_clock_divider(self, value):
+    @clock_divider.setter
+    def clock_divider(self, value):
         return self.set_speed(SpeedType.CLOCK_DIVIDER, value)
 
-    clock_divider = property(get_clock_divider, set_clock_divider)
-
-    def get_wait_states(self):
+    @property
+    def wait_states(self):
         return self.get_speed(SpeedType.WAIT_STATES)
 
-    def set_wait_states(self, value):
+    @wait_states.setter
+    def wait_states(self, value):
         return self.set_speed(SpeedType.WAIT_STATES, value)
 
-    wait_states = property(get_wait_states, set_wait_states)
-
-    def get_tot_clock_divider(self):
+    @property
+    def tot_clock_divider(self):
         return self.get_speed(SpeedType.TOT_CLOCK_DIVIDER)
 
-    def set_tot_clock_divider(self, value):
+    @tot_clock_divider.setter
+    def tot_clock_divider(self, value):
         return self.set_speed(SpeedType.TOT_CLOCK_DIVIDER, value)
 
-    tot_clock_divider = property(get_tot_clock_divider, set_tot_clock_divider)
-
-    def get_tot_duty_cycle(self):
+    @property
+    def tot_duty_cycle(self):
         return self.get_speed(SpeedType.TOT_DUTY_CYCLE)
 
-    def set_tot_duty_cycle(self, value):
+    @tot_duty_cycle.setter
+    def tot_duty_cycle(self, value):
         return self.set_speed(SpeedType.TOT_DUTY_CYCLE, value)
 
-    tot_duty_cycle = property(get_tot_duty_cycle, set_tot_duty_cycle)
-
-    def get_signal_length(self):
+    @property
+    def signal_length(self):
         return self.get_speed(SpeedType.SIGNAL_LENGTH)
 
-    def set_signal_length(self, value):
+    @signal_length.setter
+    def signal_length(self, value):
         return self.set_speed(SpeedType.SIGNAL_LENGTH, value)
 
-    signal_length = property(get_signal_length, set_signal_length)
-
-    @property
-    @auto_ctrl_connect
+    @ctrl_property
     def last_client_ip(self):
         return protocol.get_last_client_ip(self.conn_ctrl)
 
