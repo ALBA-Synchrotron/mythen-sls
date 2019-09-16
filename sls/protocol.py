@@ -190,7 +190,7 @@ MasterMode = enum.IntEnum('MasterMode', start=0, names=[
 
 
 SynchronizationMode = enum.IntEnum('SynchronizationMode', start=0, names=[
-    'NO_SYNCHRONIZATION',
+    'NONE',
     'MASTER_GATES',
     'MASTER_TRIGGERS',
     'SLAVE_STARTS_WHEN_MASTER_STOPS'
@@ -228,7 +228,7 @@ ExternalCommunicationMode = enum.IntEnum('ExternalCommunicationMode', start=0, n
 
 
 ExternalSignal = enum.IntEnum('ExternalSignal', start=0, names=[
-    'SIGNAL_OFF',                   # signal unused - tristate
+    'OFF',                          # signal unused - tristate
     'GATE_IN_ACTIVE_HIGH',          # input gate active high
     'GATE_IN_ACTIVE_LOW',           # input gate active low
     'TRIGGER_IN_RISING_EDGE',       # input exposure trigger on rising edge

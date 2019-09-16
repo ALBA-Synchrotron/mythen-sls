@@ -4,8 +4,6 @@ import yaml
 import numpy
 
 
-
-
 def save(settings, fname):
     with open(fname, 'wt') as fobj:
         return yaml.safe_dump(settings, fobj)

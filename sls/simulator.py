@@ -62,9 +62,9 @@ DEFAULT_DETECTOR_CONFIG = {
         external_signal=ExternalSignal.SIGNAL_OFF,
         external_signals=4*[ExternalSignal.GATE_OUT_ACTIVE_HIGH,
                             ExternalSignal.TRIGGER_IN_RISING_EDGE,
-                            ExternalSignal.SIGNAL_OFF,
-                            ExternalSignal.SIGNAL_OFF],
-        synchronization_mode=SynchronizationMode.NO_SYNCHRONIZATION,
+                            ExternalSignal.OFF,
+                            ExternalSignal.OFF],
+        synchronization_mode=SynchronizationMode.NONE,
         master_mode=MasterMode.NO_MASTER,
         readout_flags=ReadoutFlag.NORMAL_READOUT,
         modules=[build_default_module(idx, 0xEE0+idx) for idx in range(6)]
