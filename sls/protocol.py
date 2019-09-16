@@ -492,13 +492,13 @@ def set_external_communication_mode(conn, value):
     return _external_communication_mode(conn, value)
 
 
-def _external_signal(conn, index=-1, value=GET_CODE):
+def _external_signal(conn, index, value=GET_CODE):
     assert value == GET_CODE or isinstance(value, ExternalSignal)
     request = struct.pack('<iii', CommandCode.EXTERNAL_SIGNAL, index, value)
     result, reply = request_reply(conn, request, reply_fmt='<i')
     return result, ExternalSignal(reply[0])
 
-def get_external_signal(conn, index=-1):
+def get_external_signal(conn, index):
     return _external_signal(conn, index)
 
 def set_external_signal(conn, index, value):
@@ -554,6 +554,19 @@ def get_readout(conn):
 
 def set_readout(conn, value):
     return _readout(conn, value)
+
+
+def _lock(conn, value=GET_CODE):
+    assert value == GET_CODE or value in (0, 1)
+    request = struct.pack('<ii', CommandCode.READOUT_FLAGS, value)
+    result, reply = request_reply(conn, request, reply_fmt='<i')
+    return result, reply[0]
+
+def get_lock(conn):
+    return _lock(conn)
+
+def set_lock(conn, value):
+    return _lock(conn, value)
 
 
 def get_rois(conn):

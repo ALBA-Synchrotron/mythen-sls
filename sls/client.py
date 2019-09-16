@@ -145,6 +145,14 @@ class Detector:
     def get_module_serial_number(self, mod_nb):
         return self.get_id(IdParam.MODULE_SERIAL_NUMBER, mod_nb)
 
+    @auto_ctrl_connect
+    def get_external_signal(self, index):
+        return protocol.get_external_signal(self.conn_ctrl, index)
+
+    @auto_ctrl_connect
+    def set_external_signal(self, index, value):
+        return protocol.set_external_signal(self.conn_ctrl, index, value)
+
     @property
     def firmware_version(self):
         return self.get_id(IdParam.DETECTOR_FIRMWARE_VERSION)
@@ -178,6 +186,14 @@ class Detector:
         self.set_energy_threshold(-1, energy)
 
     @ctrl_property
+    def lock(self):
+        return protocol.get_lock(self.conn_ctrl)
+
+    @lock.setter
+    def lock(self, value):
+        return protocol.set_lock(self.conn_ctrl, 1 if value else 0)
+
+    @ctrl_property
     def synchronization_mode(self):
         return protocol.get_synchronization_mode(self.conn_ctrl)
 
@@ -194,14 +210,6 @@ class Detector:
         return protocol.set_external_communication_mode(self.conn_ctrl, value)
 
     external_communication_mode = timing_mode
-
-    @ctrl_property
-    def external_signal(self):
-        return protocol.get_external_signal(self.conn_ctrl)
-
-    @external_signal.setter
-    def external_signal(self, value):
-        return protocol.set_external_signal(self.conn_ctrl, value)
 
     @ctrl_property
     def detector_type(self):
