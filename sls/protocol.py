@@ -13,6 +13,14 @@ INET_TEMPLATE = '{{:\x00<{}}}'.format(INET_ADDRSTRLEN)
 GET_CODE = -1
 
 
+def add_enum_to_from_string(enum, emap):
+    emap_inv = {v:k for k, v in emap.items()}
+    enum.string_map = emap
+    enum.to_string = lambda o: emap[o]
+    enum.from_string = staticmethod(lambda s: emap_inv[s.lower()])
+    return enum
+
+
 CommandCode = enum.IntEnum('CommandCode', start=0, names=[
     'EXEC_COMMAND',
     'GET_ERROR',
@@ -176,10 +184,13 @@ RunStatus = enum.IntEnum('RunStatus', start=0, names=[
     'IDLE',         # detector ready to start acquisition - no data in memory
     'ERROR',        # error i.e. normally fifo full
     'WAITING',      # waiting for trigger or gate signal
-    'RUN_FINISHED', # acquisition not running but data in memory
+    'FINISHED',     # acquisition not running but data in memory
     'TRANSMITTING', # acquisition running and data in memory
     'RUNNING'       # acquisition  running, no data in memory
 ])
+
+RunStatus.to_string = lambda o: o.name.lower()
+RunStatus.from_string = lambda s: RunStatus[s.upper()]
 
 
 MasterMode = enum.IntEnum('MasterMode', start=0, names=[
@@ -225,6 +236,15 @@ ExternalCommunicationMode = enum.IntEnum('ExternalCommunicationMode', start=0, n
     'GATE_WITH_START_TRIGGER',  # gated with start trigger
     'TRIGGER_WINDOW'            # exposure time coincides with the external signal
 ])
+add_enum_to_from_string(ExternalCommunicationMode, {
+        ExternalCommunicationMode.AUTO_TIMING: 'auto',
+        ExternalCommunicationMode.TRIGGER_EXPOSURE: 'trigger',
+        ExternalCommunicationMode.TRIGGER_FRAME: 'trigger_frame',
+        ExternalCommunicationMode.TRIGGER_READOUT: 'ro_trigger',
+        ExternalCommunicationMode.GATE_FIX_NUMBER: 'gating',
+        ExternalCommunicationMode.GATE_WITH_START_TRIGGER: 'triggered_gating',
+        ExternalCommunicationMode.TRIGGER_WINDOW: 'trigger_window'
+})
 
 
 ExternalSignal = enum.IntEnum('ExternalSignal', start=0, names=[
