@@ -1,5 +1,12 @@
-import enum
+import sys
 import struct
+
+PY36 = sys.version_info[:2] >= (3, 6)
+
+if PY36:
+    import enum
+else:
+    from sls import enum36 as enum
 
 import numpy
 

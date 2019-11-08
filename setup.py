@@ -1,15 +1,9 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """The setup script."""
 
 import sys
 from setuptools import setup, find_packages
-
-
-if sys.version_info < (3, 6):
-    print('sls needs python >= 3.6')
-    exit(1)
 
 TESTING = any(x in sys.argv for x in ["test", "pytest"])
 
@@ -67,6 +61,7 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     extras_require=extras_requirements,
+    python_requires='>=3.5',
     url='https://gitlab.com/tiagocoutinho/sls',
     version='0.1.0',
     zip_safe=True

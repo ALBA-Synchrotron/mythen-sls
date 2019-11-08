@@ -83,7 +83,7 @@ def sanitize_config(config):
     return result
 
 
-def normal(nb_points=1280, scale=1000_000, offset=100, width=100, loc=None):
+def normal(nb_points=1280, scale=1000000, offset=100, width=100, loc=None):
     if loc is None:
         # middle
         loc = int(nb_points / 2)
@@ -146,10 +146,10 @@ class Acquisition:
                 if nap > 0:
                     gevent.sleep(nap)
 
-                data = normal(size, scale=ri(100_000, 50_000), loc=ri(half))
-                data += normal(size, scale=ri(300_000, 10_000), loc=ri(800))
-                data += normal(size, scale=ri(50_000, 5_000), loc=ri(5000))
-                data += normal(size, scale=ri(500_000, 10_000), loc=ri(6500))
+                data = normal(size, scale=ri(100000, 50000), loc=ri(half))
+                data += normal(size, scale=ri(300000, 10000), loc=ri(800))
+                data += normal(size, scale=ri(50000, 5000), loc=ri(5000))
+                data += normal(size, scale=ri(500000, 10000), loc=ri(6500))
                 data += numpy.random.randint(0, 100, size, '<i4') # noise
                 events = [ResultType.OK, data]
                 if is_last:
