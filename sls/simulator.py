@@ -59,7 +59,7 @@ DEFAULT_DETECTOR_CONFIG = {
         tot_duty_cycle=0,
         signal_length=3,
         external_communication_mode=ExternalCommunicationMode.AUTO_TIMING,
-        external_signal=ExternalSignal.SIGNAL_OFF,
+        external_signal=ExternalSignal.OFF,
         external_signals=4*[ExternalSignal.GATE_OUT_ACTIVE_HIGH,
                             ExternalSignal.TRIGGER_IN_RISING_EDGE,
                             ExternalSignal.OFF,
