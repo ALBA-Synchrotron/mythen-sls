@@ -35,17 +35,16 @@ class Server:
             self.conn.run('killall -q mythenDetectorServer', warn=True, hide=True)
 
     def hard_reset(self, sleep=time.sleep):
-        self.terminate()
         def start():
             self.log.info('start server')
             conn = self.make_connection()
-            conn.run('/mnt/flash/root/mythenDetectorServer &', warn=True, hide=True)
+            conn.run('/mnt/flash/root/startDetector &', warn=True, hide=True)
         proc = multiprocessing.Process(target=start)
         proc.start()
-        sleep(2) # for sure 2s needed
+        sleep(1) # for sure 2s needed
         try:
             running, start = False, time.time()
-            while ((time.time() - start) < 5) and not running:
+            while ((time.time() - start) < 8) and not running:
                 sleep(0.5)
                 running = self.is_running
                 self.log.info('loop until running (%s)', running)
@@ -55,4 +54,4 @@ class Server:
                 proc.join()
                 self.log.info('needed to terminate start server process manually')
         if not self.is_running:
-            raise SLSError('Failed to restart server')
+            raise RuntimeError('Failed to restart server')
