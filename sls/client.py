@@ -11,6 +11,7 @@
              |_|..|_|  128 channels
 """
 
+import time
 import select
 import socket
 import inspect
@@ -404,6 +405,7 @@ class Detector:
                                                        dynamic_range):
                         yield event
                 else:
+                    last_progress = 0
                     fds = self.conn_ctrl,
                     while True:
                         rfds, _, _ = select.select(fds, (), (), update_interval)
@@ -414,8 +416,13 @@ class Detector:
                                 break
                             event = 'frame', frame
                         else:
+                            last_progress = time.time()
                             event = 'progress', progress_report(self, info)
                         yield event
+                        if time.time() - last_progress > update_interval:
+                            # fire artifical event (typical when update_interval > exposure_time)
+                            last_progress = time.time()
+                            yield 'progress', progress_report(self, info)
                     yield 'progress', progress_report(self, info)
             except BaseException as err:
                 # make sure acq is stopped before closing the control socket
