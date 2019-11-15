@@ -1,46 +1,58 @@
+import time
+import logging
+import multiprocessing
+
 import fabric
 
 
 class Server:
 
-    process_name = '/mnt/flash/root/mythenDetectorServer'
-
     def __init__(self, host, user='root', password='pass'):
         self.host = host
         self.user = user
         self.password = password
-        self._connection = None
+        self._conn = None
+        self.log = logging.getLogger('sls.Server({})'.format(host))
 
-    def _build_connection(self):
-        return fabric.Connection(
-                self.host, user=self.user,
-                connect_kwargs=dict(password=self.password))
+    def make_connection(self):
+        kwargs = dict(password=self.password)
+        return fabric.Connection(self.host, user=self.user, connect_kwargs=kwargs)
+
     @property
-    def connection(self):
-        if self._connection is None:
-            self._connection = self._build_connection()
-        return self._connection
-
-    def run(self, *cmd, **kwargs):
-        return self.connection.run(' '.join(cmd), hide=True, warn=True, **kwargs)
-
-    def stop(self):
-        proc = self.process_name.rsplit('/', 1)[-1]
-        return self.run('killall', proc)
-
-    def start(self):
-        if self.is_running:
-            raise RuntimeError('Server is already running')
-        # problem: this actually never returns because fabric just waits for the
-        # process to finish which it never does
-        return self.run(self.process_name, '&')
-
-    def restart(self):
-        r1 = self.stop()
-        r2 = self.start()
-        return r1, r2
+    def conn(self):
+        if self._conn is None:
+            self._conn = self.make_connection()
+        return self._conn
 
     @property
     def is_running(self):
-        result = self.run('ps')
-        return self.process_name in result.stdout
+        result = self.conn.run('ps', warn=True, hide=True)
+        return 'mythenDetectorServer' in result.stdout
+
+    def terminate(self):
+        if self.is_running:
+            self.log.info('stop server')
+            self.conn.run('killall -q mythenDetectorServer', warn=True, hide=True)
+
+    def hard_reset(self, sleep=time.sleep):
+        self.terminate()
+        def start():
+            self.log.info('start server')
+            conn = self.make_connection()
+            conn.run('/mnt/flash/root/mythenDetectorServer &', warn=True, hide=True)
+        proc = multiprocessing.Process(target=start)
+        proc.start()
+        sleep(2) # for sure 2s needed
+        try:
+            running, start = False, time.time()
+            while ((time.time() - start) < 5) and not running:
+                sleep(0.5)
+                running = self.is_running
+                self.log.info('loop until running (%s)', running)
+        finally:
+            if proc.is_alive():
+                proc.terminate()
+                proc.join()
+                self.log.info('needed to terminate start server process manually')
+        if not self.is_running:
+            raise SLSError('Failed to restart server')
