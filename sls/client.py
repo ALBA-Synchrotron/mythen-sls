@@ -540,16 +540,25 @@ def acquisition_progress(detector, exposure_time=1, nb_frames=1, nb_cycles=1, up
         nb_frames = 1
     if nb_cycles == 0:
         nb_cycles = 1
-    exp_time_secs = int(exposure_time * 4)
-    nb_steps = exp_time_secs * nb_frames * nb_cycles
+    nb_steps = float(nb_frames * nb_cycles)
     previous_step = 0
-    with tqdm.tqdm(total=nb_steps) as pbar:
-        for event_type, event in acquire(detector, exposure_time, nb_frames, nb_cycles, update_interval):
+    fmt = '{l_bar}{bar}| {n:.1f}/{total_fmt} [{elapsed}<{remaining}, {postfix}]'
+    with tqdm.tqdm(total=nb_steps, unit='frame', bar_format=fmt) as pbar:
+        acq = acquire(detector, exposure_time, nb_frames, nb_cycles, update_interval)
+        for event_type, event in acq:
             if event_type == 'progress':
                 frame_nb = event['frame_nb'] 
                 cycle_nb = event['cycle_nb']
-                curr_time = int(event['exposure_time'] * 4)
-                step = min(curr_time + exp_time_secs*frame_nb + exp_time_secs*nb_frames*cycle_nb, nb_steps)
+                curr_time = event['exposure_time'] / exposure_time
+                step = min(curr_time + frame_nb + nb_frames*cycle_nb, nb_steps)
+                postfix = {}
+                if exposure_time > 1:
+                    postfix['Ft'] = '{:.2f}/{}s'.format(event['exposure_time_left'], exposure_time)
+                if nb_frames > 1:
+                    postfix['F#'] = '{}/{}'.format(frame_nb, nb_frames)
+                if nb_cycles > 1:
+                    postfix['C#'] = '{}/{}'.format(cycle_nb, nb_cycles)
+                pbar.set_postfix(**postfix)
                 pbar.update(step-previous_step)
                 previous_step = step
 
