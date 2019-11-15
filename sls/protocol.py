@@ -602,24 +602,30 @@ def get_rois(conn):
     return rois
 
 
-def read_all(conn, frame_size):
+def read_all(conn, frame_size, dynamic_range):
     request = struct.pack('<i', CommandCode.READ_ALL)
     conn.write(request)
-    return _read_all(conn, frame_size)
+    return fetch_frames(conn, frame_size, dynamic_range)
 
 
-def _read_all(conn, frame_size, dynamic_range):
+def fetch_frame(conn, frame_size, dynamic_range):
+    result = read_result(conn)
+    if result == ResultType.OK:
+        return result, read_data(conn, frame_size, dynamic_range)
+    elif result == ResultType.FINISHED:
+        return result, None
+    elif result == ResultType.FAIL:
+        raise SLSError(read_message(conn))
+    else:
+        raise SLSError('Unexpected frame result')
+
+
+def fetch_frames(conn, frame_size, dynamic_range):
     while True:
-        try:
-            result = read_result(conn)
-            if result == ResultType.OK:
-                frame = read_data(conn, frame_size, dynamic_range)
-                yield frame
-            elif result == ResultType.FINISHED:
-                break
-            elif result == ResultType.FAIL:
-                raise SLSError(read_message(conn))
-        except ConnectionError:
+        result, frame = fetch_frame(conn, frame_size, dynamic_range)
+        if result == ResultType.OK:
+            yield frame
+        else:
             break
 
 
@@ -634,10 +640,9 @@ def start_acquisition(conn):
     return request_reply(conn, request, reply_fmt=None)
 
 
-def start_and_read_all(conn, frame_size, dynamic_range):
+def start_and_read_all(conn):
     request = struct.pack('<i', CommandCode.START_AND_READ_ALL)
     conn.write(request)
-    return _read_all(conn, frame_size, dynamic_range)
 
 
 # STOP Connection -------------------------------------------------------------
