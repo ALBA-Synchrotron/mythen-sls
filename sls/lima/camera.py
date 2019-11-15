@@ -175,8 +175,7 @@ class Interface(HwInterface):
         self._status = Status.Ready
 
 
-def get_control(host, ctrl_port=DEFAULT_CTRL_PORT,
-                stop_port=DEFAULT_STOP_PORT):
+def get_ctrl(host, ctrl_port=DEFAULT_CTRL_PORT, stop_port=DEFAULT_STOP_PORT):
     detector = Detector(host, ctrl_port=ctrl_port, stop_port=stop_port)
     interface = Interface(detector)
     ctrl = CtControl(interface)
