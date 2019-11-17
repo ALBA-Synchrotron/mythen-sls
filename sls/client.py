@@ -145,26 +145,6 @@ class stop_property(auto_property):
         return auto_stop_connect(f)
 
 
-def progress_report(detector, info):
-    nb_cycles_left = detector.nb_cycles_left + 2
-    nb_frames_left  = detector.nb_frames_left + 2
-    exposure_time_left = detector.exposure_time_left
-    nb_cycles_finished = info['nb_cycles'] - nb_cycles_left
-    nb_frames_finished = info['nb_frames'] - nb_frames_left
-    return dict(
-        info,
-        timestamp=time.time(),
-        nb_cycles_left=nb_cycles_left,
-        nb_frames_left=nb_frames_left,
-        exposure_time_left=exposure_time_left,
-        nb_cycles_finished=nb_cycles_finished,
-        nb_frames_finished=nb_frames_finished,
-        current_cycle=nb_cycles_finished + 1,
-        current_frame=nb_frames_finished + 1,
-        total_frames_finished=nb_cycles_finished * info['nb_frames'] + nb_frames_finished,
-        exposure_time=info['acq_time'] * 1e-9 - exposure_time_left)
-
-
 class Detector:
 
     def __init__(self, host,
@@ -397,44 +377,25 @@ class Detector:
     def start_acquisition(self):
         return protocol.start_acquisition(self.conn_ctrl)
 
-    def acquire(self, update_interval=None):
+    def acquire(self):
         info = self.update_client()
         frame_size = info['data_bytes']
         dynamic_range = info['dynamic_range']
         with self.conn_ctrl:
             try:
                 protocol.start_and_read_all(self.conn_ctrl)
-                # for small acq. time don't send progress
-                if update_interval is None:
-                    for event in protocol.fetch_frames(self.conn_ctrl,
-                                                       frame_size,
-                                                       dynamic_range):
-                        yield event
-                else:
-                    last_progress = 0
-                    fds = self.conn_ctrl,
-                    while True:
-                        rfds, _, _ = select.select(fds, (), (), update_interval)
-                        if rfds:
-                            result, frame = self.fetch_frame(frame_size,
-                                                             dynamic_range)
-                            if result != ResultType.OK:
-                                break
-                            event = 'frame', frame
-                        else:
-                            last_progress = time.time()
-                            event = 'progress', progress_report(self, info)
-                        yield event
-                        if time.time() - last_progress > update_interval:
-                            # fire artifical event (typical when update_interval > exposure_time)
-                            last_progress = time.time()
-                            yield 'progress', progress_report(self, info)
-                    yield 'progress', progress_report(self, info)
+                for event in protocol.fetch_frames(self.conn_ctrl,
+                                                   frame_size,
+                                                   dynamic_range):
+                    yield event
             except BaseException as err:
                 # make sure acq is stopped before closing the control socket
                 # otherwise detector hangs
                 self.stop_acquisition()
                 raise
+
+    def acquisition(self, **opts):
+        return Acquisition(self, **opts)
 
     def fetch_frame(self, frame_size, dynamic_range):
         return protocol.fetch_frame(self.conn_ctrl, frame_size, dynamic_range)
@@ -515,69 +476,96 @@ class Detector:
 
 class Acquisition:
 
-    def __init__(self, detector, **opts):
-        self.detector = detector
-        self.opts = opts
+    def __init__(self, detector, progress_interval=0.25, **opts):
+        opts['progress_interval'] = progress_interval
+        self._detector = detector
+        self._opts = opts
         self._info = None
+        self._gen = None
 
-    def prepare(self):
-        if self._info is None:
-            for key, value in self.opts.items():
-                setattr(self.detector, key, value)
-            self._info = self.detector.update_client()
-
-    def __enter__(self):
-        self.prepare()
+    def __iter__(self):
+        if self._gen is None:
+            self._gen = self._run_gen()
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
+    def __next__(self):
+        return next(self._gen)
 
-    def stop(self):
-        self.detector.stop_acquisition()
+    def __len__(self):
+        info = self._prepare()
+        nb_frames = info['nb_frames'] or 1
+        nb_cycles = info['nb_cycles'] or 1
+        return nb_frames * nb_cycles
 
-    def irun(self, update_interval=0.25):
-        '''interactive run method'''
-        self.prepare()
-        detector, info = self.detector, self._info
+    def _prepare(self):
+        if self._info is None:
+            for key, value in self._opts.items():
+                setattr(self._detector, key, value)
+            self._info = self._detector.update_client()
+        return self._info
+
+    def _run_gen(self):
+        self._prepare()
+        progress_interval = self._opts['progress_interval']
+        if progress_interval is None:
+            return self._raw_run_gen()
+        else:
+            return self._progress_run_gen(progress_interval)
+
+    def _raw_run_gen(self):
+        detector, info = self._detector, self._info
         conn = detector.conn_ctrl
         frame_size = info['data_bytes']
         dynamic_range = info['dynamic_range']
         with conn:
             try:
                 protocol.start_and_read_all(conn)
-                # for small acq. time don't send progress
-                if update_interval is None:
-                    for event in protocol.fetch_frames(conn_ctrl,
-                                                       frame_size,
-                                                       dynamic_range):
-                        yield event
-                else:
-                    fds = conn,
-                    start = time.time()
-                    progress_count = 0
-                    while True:
-                        next_progress = start + (progress_count+1)*update_interval
-                        nap  = max(next_progress - time.time(), 0)
-                        rfds, _, _ = select.select(fds, (), (), nap)
-                        if rfds:
-                            result, frame = detector.fetch_frame(frame_size,
-                                                                 dynamic_range)
-                            if result != ResultType.OK:
-                                break
-                            yield 'frame', frame
-                        else:
-                            yield 'progress', progress_report(detector, info)
-                            progress_count += 1
-                    yield 'progress', progress_report(detector, info)
+                for event in protocol.fetch_frames(conn,
+                                                   frame_size,
+                                                   dynamic_range):
+                    yield 'frame', event
             except BaseException as err:
                 # make sure acq is stopped before closing the control socket
                 # otherwise detector hangs
                 self.stop()
                 raise
 
+    def _progress_run_gen(self, progress_interval):
+        detector, info = self._detector, self._info
+        conn = detector.conn_ctrl
+        frame_size = info['data_bytes']
+        dynamic_range = info['dynamic_range']
+        with conn:
+            try:
+                protocol.start_and_read_all(conn)
+                fds = conn,
+                start = time.time()
+                progress_count = 0
+                while True:
+                    next_progress = start + (progress_count+1)*progress_interval
+                    nap  = max(next_progress - time.time(), 0)
+                    rfds, _, _ = select.select(fds, (), (), nap)
+                    if rfds:
+                        result, frame = detector.fetch_frame(frame_size,
+                                                             dynamic_range)
+                        if result != ResultType.OK:
+                            break
+                        yield 'frame', frame
+                    else:
+                        yield 'progress', progress_report(detector, info)
+                        progress_count += 1
+                yield 'progress', progress_report(detector, info)
+            except BaseException as err:
+                # make sure acq is stopped before closing the control socket
+                # otherwise detector hangs
+                self.stop()
+                raise
+
+    def stop(self):
+        self.detector.stop_acquisition()
+
     def run(self):
-        return list(self.irun(update_interval=None))
+        return list(self)
 
 
 def dump_state(detector):
@@ -588,54 +576,21 @@ def dump_state(detector):
             if inspect.isdatadescriptor(member)}
 
 
-def acquire(detector, exposure_time=1, nb_frames=1, nb_cycles=1, update_interval=0.25):
-    exposure_time = float(exposure_time)
-    detector.exposure_time = exposure_time
-    detector.nb_frames = nb_frames
-    detector.nb_cycles = nb_cycles
-    return detector.acquire(update_interval=update_interval)
-
-
-def acquisition_text(detector, exposure_time=1, nb_frames=1, nb_cycles=1, update_interval=0.25):
-    templ = 'Current frame time left {{exposure_time_left:.3f}}s; ' \
-            'Frame #{{nb_frames_finished:03}}/{:03}; ' \
-            'Cycle #{{nb_cycles_finished:03}}/{:03};'.format(nb_frames, nb_cycles)
-    for event_type, event in acquire(detector, exposure_time=exposure_time,
-                                     nb_frames=nb_frames, nb_cycles=nb_cycles,
-                                     update_interval=update_interval):
-        if event_type == 'progress':
-            print(templ.format(**event), end='\n', flush=True)
-
-
-def acquisition_progress(detector, exposure_time=1, nb_frames=1, nb_cycles=1, update_interval=0.25):
-    import tqdm
-    if nb_frames == 0:
-        nb_frames = 1
-    if nb_cycles == 0:
-        nb_cycles = 1
-    nb_steps = nb_frames * nb_cycles
-    previous_step = 0
-    fmt = '{l_bar}{bar}| {n:.1f}/{total_fmt} [{elapsed}<{remaining}]{postfix}]'
-    with tqdm.tqdm(total=nb_steps, unit='frame', bar_format=fmt) as pbar:
-        with Acquisition(detector, exposure_time=exposure_time,
-                         nb_frames=nb_frames, nb_cycles=nb_cycles) as acq:
-            for event_type, event in acq.irun(update_interval=update_interval):
-                if event_type == 'progress':
-                    frame_nb = event['nb_frames_finished']
-                    cycle_nb = event['nb_cycles_finished']
-                    curr_time = event['exposure_time'] / exposure_time
-                    step = min(curr_time + frame_nb + nb_frames*cycle_nb, nb_steps)
-                    postfix = {}
-                    if exposure_time >= 1:
-                        postfix['Ft'] = '{:.2f}/{}s'.format(event['exposure_time_left'], exposure_time)
-                    if nb_frames > 1:
-                        postfix['F#'] = '{}/{}'.format(frame_nb, nb_frames)
-                    if nb_cycles > 1:
-                        postfix['C#'] = '{}/{}'.format(cycle_nb, nb_cycles)
-                    pbar.set_postfix(**postfix)
-                    pbar.update(step-previous_step)
-                    previous_step = step
-
-
-if __name__ == '__main__':
-    conn = Connection(('localhost', DEFAULT_CTRL_PORT))
+def progress_report(detector, info):
+    nb_cycles_left = detector.nb_cycles_left + 2
+    nb_frames_left  = detector.nb_frames_left + 2
+    exposure_time_left = detector.exposure_time_left
+    nb_cycles_finished = info['nb_cycles'] - nb_cycles_left
+    nb_frames_finished = info['nb_frames'] - nb_frames_left
+    return dict(
+        info,
+        timestamp=time.time(),
+        nb_cycles_left=nb_cycles_left,
+        nb_frames_left=nb_frames_left,
+        exposure_time_left=exposure_time_left,
+        nb_cycles_finished=nb_cycles_finished,
+        nb_frames_finished=nb_frames_finished,
+        current_cycle=nb_cycles_finished + 1,
+        current_frame=nb_frames_finished + 1,
+        total_frames_finished=nb_cycles_finished * info['nb_frames'] + nb_frames_finished,
+        exposure_time=info['acq_time'] * 1e-9 - exposure_time_left)
