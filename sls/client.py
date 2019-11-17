@@ -148,15 +148,22 @@ class stop_property(auto_property):
 
 def progress_report(detector, info):
     nb_cycles_left = detector.nb_cycles_left + 2
-    nb_frames_left = detector.nb_frames_left + 2
+    nb_frames_left  = detector.nb_frames_left + 2
     exposure_time_left = detector.exposure_time_left
-    cycle_nb = info['nb_cycles'] - nb_cycles_left
-    frame_nb = info['nb_frames'] - nb_frames_left
-    exposure_time = info['acq_time'] * 1e-9 - exposure_time_left
+    nb_cycles_finished = info['nb_cycles'] - nb_cycles_left
+    nb_frames_finished = info['nb_frames'] - nb_frames_left
     return dict(
-        info, exposure_time_left=exposure_time_left,
-        nb_cycles_left=nb_cycles_left, nb_frames_left=nb_frames_left,
-        cycle_nb=cycle_nb, frame_nb=frame_nb, exposure_time=exposure_time)
+        info,
+        timestamp=time.time(),
+        nb_cycles_left=nb_cycles_left,
+        nb_frames_left=nb_frames_left,
+        exposure_time_left=exposure_time_left,
+        nb_cycles_finished=nb_cycles_finished,
+        nb_frames_finished=nb_frames_finished,
+        current_cycle=nb_cycles_finished + 1,
+        current_frame=nb_frames_finished + 1,
+        total_frames_finished=nb_cycles_finished * info['nb_frames'] + nb_frames_finished,
+        exposure_time=info['acq_time'] * 1e-9 - exposure_time_left)
 
 
 class Detector:
@@ -507,6 +514,73 @@ class Detector:
         return TEMPLATE.format(o=self)
 
 
+class Acquisition:
+
+    def __init__(self, detector, **opts):
+        self.detector = detector
+        self.opts = opts
+        self._info = None
+
+    def prepare(self):
+        if self._info is None:
+            for key, value in self.opts.items():
+                setattr(self.detector, key, value)
+            self._info = self.detector.update_client()
+
+    def __enter__(self):
+        self.prepare()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    def stop(self):
+        self.detector.stop_acquisition()
+
+    def irun(self, update_interval=0.25):
+        '''interactive run method'''
+        self.prepare()
+        detector, info = self.detector, self._info
+        conn = detector.conn_ctrl
+        frame_size = info['data_bytes']
+        dynamic_range = info['dynamic_range']
+        with conn:
+            try:
+                protocol.start_and_read_all(conn)
+                # for small acq. time don't send progress
+                if update_interval is None:
+                    for event in protocol.fetch_frames(conn_ctrl,
+                                                       frame_size,
+                                                       dynamic_range):
+                        yield event
+                else:
+                    fds = conn,
+                    start = time.time()
+                    progress_count = 0
+                    while True:
+                        next_progress = start + (progress_count+1)*update_interval
+                        nap  = max(next_progress - time.time(), 0)
+                        rfds, _, _ = select.select(fds, (), (), nap)
+                        if rfds:
+                            result, frame = detector.fetch_frame(frame_size,
+                                                                 dynamic_range)
+                            if result != ResultType.OK:
+                                break
+                            yield 'frame', frame
+                        else:
+                            yield 'progress', progress_report(detector, info)
+                            progress_count += 1
+                    yield 'progress', progress_report(detector, info)
+            except BaseException as err:
+                # make sure acq is stopped before closing the control socket
+                # otherwise detector hangs
+                self.stop()
+                raise
+
+    def run(self):
+        return list(self.irun(update_interval=None))
+
+
 def dump_state(detector):
     klass = type(detector)
     members = ((name, getattr(klass, name)) for name in dir(klass)
@@ -525,8 +599,8 @@ def acquire(detector, exposure_time=1, nb_frames=1, nb_cycles=1, update_interval
 
 def acquisition_text(detector, exposure_time=1, nb_frames=1, nb_cycles=1, update_interval=0.25):
     templ = 'Current frame time left {{exposure_time_left:.3f}}s; ' \
-            'Frame #{{frame_nb:03}}/{:03}; ' \
-            'Cycle #{{cycle_nb:03}}/{:03};'.format(nb_frames, nb_cycles)
+            'Frame #{{nb_frames_finished:03}}/{:03}; ' \
+            'Cycle #{{nb_cycles_finished:03}}/{:03};'.format(nb_frames, nb_cycles)
     for event_type, event in acquire(detector, exposure_time=exposure_time,
                                      nb_frames=nb_frames, nb_cycles=nb_cycles,
                                      update_interval=update_interval):
@@ -540,27 +614,28 @@ def acquisition_progress(detector, exposure_time=1, nb_frames=1, nb_cycles=1, up
         nb_frames = 1
     if nb_cycles == 0:
         nb_cycles = 1
-    nb_steps = float(nb_frames * nb_cycles)
+    nb_steps = nb_frames * nb_cycles
     previous_step = 0
-    fmt = '{l_bar}{bar}| {n:.1f}/{total_fmt} [{elapsed}<{remaining}, {postfix}]'
+    fmt = '{l_bar}{bar}| {n:.1f}/{total_fmt} [{elapsed}<{remaining}]{postfix}]'
     with tqdm.tqdm(total=nb_steps, unit='frame', bar_format=fmt) as pbar:
-        acq = acquire(detector, exposure_time, nb_frames, nb_cycles, update_interval)
-        for event_type, event in acq:
-            if event_type == 'progress':
-                frame_nb = event['frame_nb'] 
-                cycle_nb = event['cycle_nb']
-                curr_time = event['exposure_time'] / exposure_time
-                step = min(curr_time + frame_nb + nb_frames*cycle_nb, nb_steps)
-                postfix = {}
-                if exposure_time > 1:
-                    postfix['Ft'] = '{:.2f}/{}s'.format(event['exposure_time_left'], exposure_time)
-                if nb_frames > 1:
-                    postfix['F#'] = '{}/{}'.format(frame_nb, nb_frames)
-                if nb_cycles > 1:
-                    postfix['C#'] = '{}/{}'.format(cycle_nb, nb_cycles)
-                pbar.set_postfix(**postfix)
-                pbar.update(step-previous_step)
-                previous_step = step
+        with Acquisition(detector, exposure_time=exposure_time,
+                         nb_frames=nb_frames, nb_cycles=nb_cycles) as acq:
+            for event_type, event in acq.irun(update_interval=update_interval):
+                if event_type == 'progress':
+                    frame_nb = event['nb_frames_finished']
+                    cycle_nb = event['nb_cycles_finished']
+                    curr_time = event['exposure_time'] / exposure_time
+                    step = min(curr_time + frame_nb + nb_frames*cycle_nb, nb_steps)
+                    postfix = {}
+                    if exposure_time >= 1:
+                        postfix['Ft'] = '{:.2f}/{}s'.format(event['exposure_time_left'], exposure_time)
+                    if nb_frames > 1:
+                        postfix['F#'] = '{}/{}'.format(frame_nb, nb_frames)
+                    if nb_cycles > 1:
+                        postfix['C#'] = '{}/{}'.format(cycle_nb, nb_cycles)
+                    pbar.set_postfix(**postfix)
+                    pbar.update(step-previous_step)
+                    previous_step = step
 
 
 if __name__ == '__main__':
