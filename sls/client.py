@@ -36,7 +36,6 @@ Exposure_time: {o.exposure_time}
 Master: {o.master_mode.name}
 Synchronization: {o.synchronization_mode.name}
 Timing: {o.timing_mode.name}
-Communication: {o.external_communication_mode.name}
 Nb. frames: {o.nb_frames}
 Nb. cycles: {o.nb_cycles}
 Readout: {o.readout}'''
