@@ -562,7 +562,7 @@ class Acquisition:
                 raise
 
     def stop(self):
-        self.detector.stop_acquisition()
+        self._detector.stop_acquisition()
 
     def run(self):
         return list(self)
