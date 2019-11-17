@@ -26,7 +26,7 @@ from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, SLSError,
 
 
 TEMPLATE = '''\
-{o.detector_type.name} at tcp://{o.conn_ctrl.addr[0]}:{o.conn_ctrl.addr[1]}
+{o.detector_type.name} at tcp://{o.conn_ctrl.host}:{o.conn_ctrl.port}
 Serial nb.: {o.serial_number}
 Soft. version: {o.software_version}
 Status: {o.run_status.name}
@@ -44,7 +44,11 @@ Readout: {o.readout}'''
 class Connection:
 
     def __init__(self, addr):
-        self.addr = addr
+        # since every command reconnects the detector, we try to be nice to the DNS
+        # by making sure we use IP instead of hostname. This avoids unnecessary
+        # requests to the DNS
+        self.host, self.port = addr
+        self.addr = socket.gethostbyname(self.host), self.port
         self.sock = None
         self.log = logging.getLogger('Connection({0[0]}:{0[1]})'.format(addr))
 
