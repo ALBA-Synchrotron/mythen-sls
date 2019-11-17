@@ -501,6 +501,13 @@ class Acquisition:
         nb_cycles = info['nb_cycles'] or 1
         return nb_frames * nb_cycles
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self._gen is not None:
+            self._gen.close()
+
     def _prepare(self):
         if self._info is None:
             for key, value in self._opts.items():

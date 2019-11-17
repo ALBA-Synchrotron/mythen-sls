@@ -8,14 +8,14 @@ def acquisition(detector, exposure_time=1, nb_frames=1, nb_cycles=1,
     templ = 'Current frame time left {{exposure_time_left:.3f}}s; ' \
             'Frame #{{nb_frames_finished:03}}/{:03}; ' \
             'Cycle #{{nb_cycles_finished:03}}/{:03};'.format(nb_frames, nb_cycles)
-    acq = detector.acquisition(exposure_time=exposure_time,
+    with detector.acquisition(exposure_time=exposure_time,
         nb_frames=nb_frames, nb_cycles=nb_cycles,
-        progress_interval=progress_interval)
-    for event_type, event in acq:
-        if event_type == 'progress':
-            print(templ.format(**event), end='\n', flush=True)
-        elif event_type == 'frame':
-            print('frame!')
+        progress_interval=progress_interval) as acq:
+        for event_type, event in acq:
+            if event_type == 'progress':
+                print(templ.format(**event), end='\n', flush=True)
+            elif event_type == 'frame':
+                print('frame!')
 
 
 def run(options):
