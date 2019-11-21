@@ -392,21 +392,9 @@ class Detector:
         return protocol.start_acquisition(self.conn_ctrl)
 
     def acquire(self):
-        info = self.update_client()
-        frame_size = info['data_bytes']
-        dynamic_range = info['dynamic_range']
-        with self.conn_ctrl:
-            try:
-                protocol.start_and_read_all(self.conn_ctrl)
-                for event in protocol.fetch_frames(self.conn_ctrl,
-                                                   frame_size,
-                                                   dynamic_range):
-                    yield event
-            except BaseException as err:
-                # make sure acq is stopped before closing the control socket
-                # otherwise detector hangs
-                self.stop_acquisition()
-                raise
+        with self.acquisition(progress_interval=None) as acq:
+            for event, frame in acq:
+                yield frame
 
     def acquisition(self, **opts):
         return Acquisition(self, **opts)
