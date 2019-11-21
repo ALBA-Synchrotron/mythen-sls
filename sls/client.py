@@ -26,19 +26,20 @@ from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, SLSError,
 
 
 TEMPLATE = '''\
-{o.detector_type.name} at tcp://{o.conn_ctrl.host}:{o.conn_ctrl.port}
+{o.detector_type.name} at tcp://{o.host}:{o.conn_ctrl.port}
 Serial nb.: {o.serial_number}
 Soft. version: {o.software_version}
 Status: {o.run_status.name}
 Dynamic range: {o.dynamic_range}
 Energy threshold: {o.energy_threshold}
-Exposure_time: {o.exposure_time}
+Exposure time: {o.exposure_time}
 Master: {o.master_mode.name}
 Synchronization: {o.synchronization_mode.name}
 Timing: {o.timing_mode.name}
 Nb. frames: {o.nb_frames}
 Nb. cycles: {o.nb_cycles}
 Nb. gates: {o.nb_gates}
+Delay after triger: {o.delay_after_trigger}
 Readout: {o.readout}'''
 
 
