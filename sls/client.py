@@ -540,7 +540,7 @@ class Acquisition:
         dynamic_range = info['dynamic_range']
         with conn:
             try:
-                protocol.start_and_read_all(conn)
+                protocol.start_acquisition_and_read_all(conn)
                 for event in protocol.fetch_frames(conn,
                                                    frame_size,
                                                    dynamic_range):
@@ -558,7 +558,7 @@ class Acquisition:
         dynamic_range = info['dynamic_range']
         with conn:
             try:
-                protocol.start_and_read_all(conn)
+                protocol.start_acquisition_and_read_all(conn)
                 fds = conn,
                 start = time.time()
                 progress_count = 0

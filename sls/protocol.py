@@ -647,7 +647,7 @@ def start_acquisition(conn):
     return request_reply(conn, request, reply_fmt=None)
 
 
-def start_and_read_all(conn):
+def start_acquisition_and_read_all(conn):
     request = struct.pack('<i', CommandCode.START_AND_READ_ALL)
     conn.write(request)
 
