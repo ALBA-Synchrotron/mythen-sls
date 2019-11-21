@@ -22,7 +22,8 @@ test_requirements = ['pytest', 'pytest-cov']
 extras_requirements = {
     'simulator': ['pyyaml', 'gevent', 'scipy'],
     'gui': ['pyqtgraph'],
-    'lima': [] # one day lima may be in pypi
+    'lima': [], # one day lima may be in pypi
+    'server': ['fabric']
 }
 
 setup(
