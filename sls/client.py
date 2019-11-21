@@ -38,6 +38,7 @@ Synchronization: {o.synchronization_mode.name}
 Timing: {o.timing_mode.name}
 Nb. frames: {o.nb_frames}
 Nb. cycles: {o.nb_cycles}
+Nb. gates: {o.nb_gates}
 Readout: {o.readout}'''
 
 
@@ -313,6 +314,14 @@ class Detector:
     @nb_cycles.setter
     def nb_cycles(self, nb_cycles):
         self.set_timer(TimerType.NB_CYCLES, nb_cycles)
+
+    @property
+    def nb_gates(self):
+        return self.get_timer(TimerType.NB_GATES)
+
+    @nb_gates.setter
+    def nb_gates(self, nb_gates):
+        self.set_timer(TimerType.NB_GATES, nb_gates)
 
     @property
     def delay_after_trigger(self):
