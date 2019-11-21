@@ -1,6 +1,7 @@
+import sys
 import time
 import logging
-import multiprocessing
+import subprocess
 
 import fabric
 
@@ -26,8 +27,11 @@ class Server:
 
     @property
     def is_running(self):
-        result = self.conn.run('ps', warn=True, hide=True)
-        return 'mythenDetectorServer' in result.stdout
+        return 'mythenDetectorServer' in self.processes
+
+    @property
+    def processes(self):
+        return self.conn.run('ps', warn=True, hide=True).stdout
 
     def terminate(self):
         if self.is_running:
@@ -35,23 +39,26 @@ class Server:
             self.conn.run('killall -q mythenDetectorServer', warn=True, hide=True)
 
     def hard_reset(self, sleep=time.sleep):
-        def start():
-            self.log.info('start server')
-            conn = self.make_connection()
-            conn.run('/mnt/flash/root/startDetector &', warn=True, hide=True)
-        proc = multiprocessing.Process(target=start)
-        proc.start()
-        sleep(1) # for sure 2s needed
+        self.log.info('start server')
+        user_host = '{}@{}'.format(self.user, self.host)
+        args = [sys.executable, '-m', 'sls.server', user_host, self.password]
+        proc = subprocess.Popen(args, close_fds=True)
         try:
-            running, start = False, time.time()
-            while ((time.time() - start) < 8) and not running:
-                sleep(0.5)
-                running = self.is_running
-                self.log.info('loop until running (%s)', running)
-        finally:
-            if proc.is_alive():
-                proc.terminate()
-                proc.join()
-                self.log.info('needed to terminate start server process manually')
+            proc.wait(timeout=8)
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            self.log.info('needed to terminate start server process manually')
         if not self.is_running:
             raise RuntimeError('Failed to restart server')
+
+
+def restart_detector():
+    user_host, password = sys.argv[1:3]
+    user, host = user_host.split('@')
+    kwargs = dict(password=password)
+    conn = fabric.Connection(host, user=user, connect_kwargs=kwargs)
+    conn.run('/mnt/flash/root/startDetector &', warn=True, hide=True)
+
+
+if __name__ == '__main__':
+    restart_detector()
