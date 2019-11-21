@@ -17,7 +17,7 @@ import socket
 import inspect
 import logging
 import functools
-
+import contextlib
 import numpy
 
 from . import protocol
@@ -589,12 +589,35 @@ class Acquisition:
         return list(self)
 
 
-def dump_state(detector):
+@contextlib.contextmanager
+def ensure_state(detector, state=None):
+    """
+    Context manager. Ensures detector is brought to the initial state after
+    context is finished
+    """
+    if state is None:
+        state = dump_state(detector, 'rw')
+    try:
+        yield
+    finally:
+        for key, value in state.items():
+            setattr(detector, key, value)
+
+
+def dump_state(detector, filters='r'):
     klass = type(detector)
     members = ((name, getattr(klass, name)) for name in dir(klass)
                if not name.startswith('_'))
-    return {name:getattr(detector, name) for name, member in members
-            if inspect.isdatadescriptor(member)}
+    descriptors = ((name, member) for name, member in members
+                   if inspect.isdatadescriptor(member))
+    def filt(m):
+        if 'r' in filters and not m[1].fget:
+            return False
+        if 'w' in filters and not m[1].fset:
+            return False
+        return True
+    descriptors = filter(filt, descriptors)
+    return {name:getattr(detector, name) for name,_ in descriptors}
 
 
 def progress_report(detector, info):
