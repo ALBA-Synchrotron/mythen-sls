@@ -58,7 +58,10 @@ def main(args=None):
     p.add_argument('--progress-interval', default=0.25, type=float)
     p.add_argument('host')
     opts = p.parse_args(args)
-    run(opts)
+    try:
+        run(opts)
+    except KeyboardInterrupt:
+        print('Ctrl-C pressed. Bailing out')
 
 
 if __name__ == '__main__':
