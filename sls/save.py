@@ -3,7 +3,7 @@ import numpy
 
 def save(frame, filename):
     if filename.endswith('.raw'):
-        data = '\n'.join('{} {}'.format(n, p) for n, p in enumerate(frame))
+        data = '\n'.join('%d %d' % (n, p) for n, p in enumerate(frame))
         with open(filename, 'wt') as f:
             f.write(data)
     else:
