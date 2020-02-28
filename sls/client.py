@@ -26,7 +26,7 @@ from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, SLSError,
 
 
 TEMPLATE = '''\
-{o.detector_type.name} at tcp://{o.host}:{o.conn_ctrl.port}
+{o.detector_type.name} at tcp://{o.host}:{o.conn_ctrl.port}, tcp://{o.host}:{o.conn_stop.port}
 Serial nb.: {o.serial_number}
 Soft. version: {o.software_version}
 Status: {o.run_status.name}
@@ -40,7 +40,8 @@ Nb. frames: {o.nb_frames}
 Nb. cycles: {o.nb_cycles}
 Nb. gates: {o.nb_gates}
 Delay after triger: {o.delay_after_trigger}
-Readout: {o.readout}'''
+Readout: {o.readout}
+External signals: {external_signals}'''
 
 
 class Connection:
@@ -473,7 +474,8 @@ class Detector:
         return protocol.get_last_client_ip(self.conn_ctrl)
 
     def __repr__(self):
-        return TEMPLATE.format(o=self)
+        external_signals = [self.get_external_signal(i).name for i in range(4)]
+        return TEMPLATE.format(o=self, external_signals=external_signals)
 
 
 class Acquisition:
