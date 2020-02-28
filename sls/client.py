@@ -611,11 +611,13 @@ def dump_state(detector, filters='r'):
 
 
 def progress_report(detector, info):
+    nb_frames = info['nb_frames'] or 1
+    nb_cycles = info['nb_cycles'] or 1
     nb_cycles_left = detector.nb_cycles_left + 2
     nb_frames_left  = detector.nb_frames_left + 2
     exposure_time_left = detector.exposure_time_left
-    nb_cycles_finished = info['nb_cycles'] - nb_cycles_left
-    nb_frames_finished = info['nb_frames'] - nb_frames_left
+    nb_cycles_finished = nb_cycles - nb_cycles_left
+    nb_frames_finished = nb_frames - nb_frames_left
     return dict(
         info,
         timestamp=time.time(),
@@ -626,5 +628,5 @@ def progress_report(detector, info):
         nb_frames_finished=nb_frames_finished,
         current_cycle=nb_cycles_finished + 1,
         current_frame=nb_frames_finished + 1,
-        total_frames_finished=nb_cycles_finished * info['nb_frames'] + nb_frames_finished,
+        total_frames_finished=nb_cycles_finished * nb_frames + nb_frames_finished,
         exposure_time=info['acq_time'] * 1e-9 - exposure_time_left)

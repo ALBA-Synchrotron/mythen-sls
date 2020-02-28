@@ -118,7 +118,7 @@ class Acquisition:
     @property
     def acquisition_time_left(self):
         frame_elapsed = time.time() - self.frame_start
-        return self.params['acquisition_time'] - frame_elapsed
+        return max(self.params['acquisition_time'] - frame_elapsed, 0)
 
     def start(self):
         self.task = gevent.spawn(self.run)
