@@ -16,8 +16,8 @@ class MythenSLSController(OneDController):
     organization = "SLS"
 
     MaxDevice = 1
-    
-    class_prop = {
+
+    ctrl_properties = {
         'address': {
             Description: 'IP/host',
             Type: str
@@ -31,6 +31,8 @@ class MythenSLSController(OneDController):
             Access: DataAccess.ReadWrite
         }
     }
+
+    axis_attributes = dict(ctrl_attributes)
 
     StateMap = {
         RunStatus.IDLE: State.On,
@@ -57,14 +59,14 @@ class MythenSLSController(OneDController):
         status = self.detector.run_status
         self.state = self.StateMap[status], status.name
 
-    def StateOne(self):
+    def StateOne(self, axis):
         return self.state
 
     def ReadOne(self, axis):
         if self.acq is None:
             raise ValueError('Not in acquisition!')
         if self.acq.frames_ready:
-            return next(self.acq)
+            return next(self.acq)[1].tolist()
 
     def StartOne(self, axis, value):
         self._stop()
@@ -79,9 +81,21 @@ class MythenSLSController(OneDController):
         if not self._stop():
             self.detector.stop_acquisition()
 
-    def SetCtrlPar(self, parameter, value):
-        setattr(self.detector, parameter, value)
+    def SetCtrlPar(self, name, value):
+        if name in dir(self.detector):
+            setattr(self.detector, name, value)
+        else:
+            return super().SetCtrlPar(name, value)
 
-    def GetCtrlPar(self, paramer):
-        return getattr(self.detector, parameter)
+    def GetCtrlPar(self, name):
+        if name in dir(self.detector):
+            return getattr(self.detector, name)
+        else:
+            return super().GetCtrlPar(name)
+
+    def SetAxisExtraPar(self, axis, name, value):
+        self.SetCtrlPar(name, value)
+
+    def GetAxisExtraPar(self, axis, name):
+        return self.GetCtrlPar(name)
 
