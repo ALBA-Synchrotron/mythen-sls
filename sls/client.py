@@ -390,7 +390,7 @@ class Detector:
 
     @auto_ctrl_connect
     def start_acquisition(self):
-        return protocol.start_acquisition(self.conn_ctrl)
+        return protocol.start_acquisition(self.conn_ctrl, keep_connection=False)
 
     def acquire(self):
         with self.acquisition(progress_interval=None) as acq:
@@ -530,7 +530,7 @@ class Acquisition:
         dynamic_range = info['dynamic_range']
         with conn:
             try:
-                protocol.start_acquisition_and_read_all(conn)
+                protocol.start_acquisition(conn)
                 for event in protocol.fetch_frames(conn,
                                                    frame_size,
                                                    dynamic_range):
@@ -548,13 +548,13 @@ class Acquisition:
         dynamic_range = info['dynamic_range']
         with conn:
             try:
-                protocol.start_acquisition_and_read_all(conn)
+                protocol.start_acquisition(conn)
                 fds = conn,
                 start = time.time()
                 progress_count = 0
                 while True:
                     next_progress = start + (progress_count+1)*progress_interval
-                    nap  = max(next_progress - time.time(), 0)
+                    nap = max(next_progress - time.time(), 0)
                     rfds, _, _ = select.select(fds, (), (), nap)
                     if rfds:
                         result, frame = detector.fetch_frame(frame_size,

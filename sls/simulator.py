@@ -108,17 +108,13 @@ class Acquisition:
                            acquisition_time=detector['acquisition_time']*1e-9,
                            dead_time=detector['frame_period']*1e-9,
                            size=int(self.detector.data_bytes / 4))
-        self.nb_frames_left = self.params['nb_frames']
+        self.nb_frames_left = self.params['nb_frames'] * self.params['nb_cycles']
         self.nb_cycles_left = self.params['nb_cycles']
-
-    @property
-    def total_nb_frames_left(self):
-        return self.nb_frames_left * self.nb_cycles_left
 
     @property
     def acquisition_time_left(self):
         frame_elapsed = time.time() - self.frame_start
-        return max(self.params['acquisition_time'] - frame_elapsed, 0)
+        return self.params['acquisition_time'] - frame_elapsed
 
     def start(self):
         self.task = gevent.spawn(self.run)
@@ -143,10 +139,9 @@ class Acquisition:
         half = size // 2
         ri = lambda x, n=200: numpy.random.randint(x-n, x+n)
         for cycle_index in range(nb_cycles):
-            print(cycle_index)
             self.nb_frames_left = nb_frames
             for frame_index in range(nb_frames):
-                is_last = self.total_nb_frames_left == 1
+                is_last = self.nb_frames_left == 1
                 self.frame_start = time.time()
                 nap = start_time + (acq_time + dead_time) * n + acq_time - time.time()
                 if nap > 0:
@@ -175,19 +170,12 @@ class Acquisition:
             self.task.kill()
 
 
-class DummyAcquisition(Acquisition):
-    def __init__(self, detector):
-        super().__init__(detector)
-        self.nb_frames_left = 0
-        self.nb_cycles_left = 0
-
-
 class Detector:
 
     def __init__(self, config):
         self.config = config
         self._run_status = RunStatus.IDLE
-        self.acquisition = DummyAcquisition(self)
+        self.acquisition = None
         self._reset_status
         self.last_client = (None, 0)
         self.servers = []
@@ -530,13 +518,16 @@ class Detector:
     def time_left(self, conn, addr):
         timer_type = TimerType(read_i32(conn))
         name = timer_type.name.lower()
-        acq = self.acquisition
-        if timer_type == TimerType.ACQUISITION_TIME:
-            result = int(acq.acquisition_time_left * 1E9)
-        elif timer_type == TimerType.NB_FRAMES:
-            result = acq.nb_frames_left - 2
-        elif timer_type == TimerType.NB_CYCLES:
-            result = acq.nb_cycles_left - 2
+        if self._run_status == RunStatus.IDLE:
+            result = self[name]
+        elif self._run_status == RunStatus.RUNNING:
+            acq = self.acquisition
+            if timer_type == TimerType.ACQUISITION_TIME:
+                result = int(acq.acquisition_time_left * 1E9)
+            elif timer_type == TimerType.NB_FRAMES:
+                result = acq.nb_frames_left
+            elif timer_type == TimerType.NB_CYCLES:
+                result = acq.nb_cycles_left
         self.log.info('get time left %r = %r', timer_type.name, result)
         return struct.pack('<q', result)
 
@@ -565,6 +556,7 @@ class Detector:
                     pass
         finally:
             self.acquisition.stop()
+            self.acquisition = None
             self._run_status = RunStatus.IDLE
             self.log.info('finished acquisition')
             conn.flush()
