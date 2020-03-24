@@ -4,6 +4,7 @@ from sls.lima.camera import get_ctrl
 from sls.protocol import DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT
 from sls.protocol import RunStatus
 
+
 class MythenSLS(Device):
 
     host = device_property(dtype=str)

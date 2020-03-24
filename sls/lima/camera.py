@@ -15,7 +15,7 @@ import numpy
 from Lima.Core import (
     HwInterface, HwDetInfoCtrlObj, HwSyncCtrlObj, HwBufferCtrlObj, HwCap,
     HwFrameInfoType, SoftBufferCtrlObj, Size, Point, FrameDim, Roi, Bpp32,
-    IntTrig, IntTrigMult, Timestamp, AcqReady, CtControl, CtSaving)
+    IntTrig, IntTrigMult, Timestamp, AcqReady, AcqRunning, CtControl, CtSaving)
 
 from sls.client import Detector
 from sls.protocol import DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT
@@ -57,9 +57,12 @@ class Sync(HwSyncCtrlObj):
 
     def setNbHwFrames(self, nb_frames):
         self.detector.nb_frames = nb_frames
+        self.detector.nb_cycles = 1
 
     def getNbHwFrames(self):
-        return self.detector.nb_frames
+        nb = self.detector.nb_frames or 1
+        nb *= self.detector.nb_cycles or 1
+        return nb
 
     def getValidRanges(self):
         return self.ValidRangesType(10E-9, 1E6, 10E-9, 1E6)
@@ -117,6 +120,7 @@ class Interface(HwInterface):
         self._status = Status.Ready
         self._nb_acquired_frames = 0
         self._acq_thread = None
+        self._acq = None
 
     def getCapList(self):
         return self.caps
@@ -128,15 +132,19 @@ class Interface(HwInterface):
         nb_frames = self.sync.getNbHwFrames()
         frame_dim = self.buff.getFrameDim()
         frame_infos = [HwFrameInfoType() for i in range(nb_frames)]
+        self._acq = self.detector.acquisition(progress_interval=None)
         self._nb_acquired_frames = 0
-        self._acq_thread = threading.Thread(target=self._acquire,
-                                            args=(frame_dim, frame_infos))
+        self._acq_thread = threading.Thread(
+            target=self._acquire, args=(self._acq, frame_dim, frame_infos))
 
     def startAcq(self):
         self._acq_thread.start()
 
     def stopAcq(self):
-        self.detector.stop_acquisition()
+        if self._acq:
+            self._acq.stop()
+        else:
+            self.detector.stop_acquisition()
         if self._acq_thread:
             self._acq_thread.join()
 
@@ -148,19 +156,24 @@ class Interface(HwInterface):
     def getNbHwAcquiredFrames(self):
         return self._nb_acquired_frames
 
-    def _acquire(self, frame_dim, frame_infos):
+    def _acquire(self, acq, frame_dim, frame_infos):
         try:
-            self._acquisition_loop(frame_dim, frame_infos)
-        except Exception as err:
+            self._acquisition_loop(acq, frame_dim, frame_infos)
+        except BaseException as err:
             print('Error occurred: {!r}'.format(err))
+            import traceback
+            traceback.print_exc()
+        finally:
+            self._acq = None
 
-    def _acquisition_loop(self, frame_dim, frame_infos):
+    def _acquisition_loop(self, acq, frame_dim, frame_infos):
         frame_size = frame_dim.getMemSize()
         buffer_mgr = self.buff.getBuffer()
+
         start_time = time.time()
         buffer_mgr.setStartTimestamp(Timestamp(start_time))
         self._status = Status.Exposure
-        for frame_nb, frame in enumerate(self.detector.acquire()):
+        for frame_nb, (_, frame) in enumerate(acq):
             self._status = Status.Readout
             buff = buffer_mgr.getFrameBufferPtr(frame_nb)
             # don't know why the sip.voidptr has no size
@@ -183,7 +196,7 @@ def get_ctrl(host, ctrl_port=DEFAULT_CTRL_PORT, stop_port=DEFAULT_STOP_PORT):
 
 
 def run(options):
-    ctrl = get_control(options.host, options.ctrl_port, options.stop_port)
+    ctrl = get_ctrl(options.host, options.ctrl_port, options.stop_port)
 
     acq = ctrl.acquisition()
     acq.setAcqExpoTime(options.exposure_time)
@@ -196,7 +209,6 @@ def run(options):
     if options.saving_directory:
         saving.setSavingMode(saving.AutoFrame)
         saving.setDirectory(options.saving_directory)
-    print(saving.getParameters())
 
     ready_event = threading.Event()
 
@@ -216,12 +228,19 @@ def run(options):
     ctrl.prepareAcq()
     start = time.time()
     ctrl.startAcq()
-    ready_event.wait()
-    print()
-    while ctrl.getStatus().AcquisitionStatus != AcqReady:
-        print('Running... Waitting to finish!')
-    print('Took {}s'.format(cb.end_time-start))
 
+    try:
+        ready_event.wait()
+        print()
+        while ctrl.getStatus().AcquisitionStatus == AcqRunning:
+            print('Running... Waiting to finish!')
+            time.sleep(0.01)
+        print('Took {}s'.format(cb.end_time-start))
+    except KeyboardInterrupt:
+        ctrl.stopAcq()
+        print()
+
+    ctrl.unregisterImageStatusCallback(cb)
     return ctrl
 
 
@@ -233,7 +252,6 @@ def get_options(namespace, enum):
 def main(args=None):
     import argparse
     file_format_options = get_options(CtSaving, CtSaving.FileFormat)
-    breakpoint()
     file_format_suffix = {f: '.{}'.format(f.replace('HDF5', 'h5').replace('Format', '').lower())
                           for f in file_format_options}
     parser = argparse.ArgumentParser()
