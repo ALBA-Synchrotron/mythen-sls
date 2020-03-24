@@ -486,6 +486,8 @@ class Acquisition:
         self._opts = opts
         self._info = None
         self._gen = None
+        self._stopped = False
+        self.nb_frames = 0
 
     def __iter__(self):
         if self._gen is None:
@@ -505,6 +507,9 @@ class Acquisition:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type is not None:
+            if self._gen is not None:
+                self.stop()
         if self._gen is not None:
             self._gen.close()
 
@@ -534,7 +539,12 @@ class Acquisition:
                 for event in protocol.fetch_frames(conn,
                                                    frame_size,
                                                    dynamic_range):
+                    self.nb_frames += 1
                     yield 'frame', event
+            except SLSError:
+                if self._stopped:
+                    return
+                raise
             except BaseException as err:
                 # make sure acq is stopped before closing the control socket
                 # otherwise detector hangs
@@ -561,18 +571,31 @@ class Acquisition:
                                                              dynamic_range)
                         if result != ResultType.OK:
                             break
+                        self.nb_frames += 1
                         yield 'frame', frame
                     else:
                         yield 'progress', progress_report(detector, info)
                         progress_count += 1
                 yield 'progress', progress_report(detector, info)
+            except SLSError:
+                if self._stopped:
+                    return
+                raise
             except BaseException as err:
                 # make sure acq is stopped before closing the control socket
                 # otherwise detector hangs
                 self.stop()
                 raise
 
+    def frames_ready(self):
+        conn = self.detector.conn_ctrl
+        try:
+            return bool(select.select((conn,), (), (), 0)[0])
+        except ValueError:
+            return False
+
     def stop(self):
+        self._stopped = True
         self._detector.stop_acquisition()
 
     def run(self):
