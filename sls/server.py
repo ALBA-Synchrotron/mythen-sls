@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import logging
@@ -33,6 +34,11 @@ class Server:
     def processes(self):
         return self.conn.run('ps', warn=True, hide=True).stdout
 
+    def start(self):
+        self.conn.run('/mnt/flash/root/mythenDetectorServer 1953 &',
+                      warn=True, hide=True)
+        return self.is_running
+
     def terminate(self):
         if self.is_running:
             self.log.info('stop server')
@@ -40,8 +46,8 @@ class Server:
 
     def hard_reset(self, sleep=time.sleep):
         self.log.info('start server')
-        user_host = '{}@{}'.format(self.user, self.host)
-        args = [sys.executable, '-m', 'sls.server', user_host, self.password]
+        args = [sys.executable, '-m', 'sls.server', self.host, self.user,
+                self.password]
         proc = subprocess.Popen(args, close_fds=True)
         try:
             proc.wait(timeout=8)
@@ -53,11 +59,11 @@ class Server:
 
 
 def restart_detector():
-    user_host, password = sys.argv[1:3]
-    user, host = user_host.split('@')
+    host, user, password = sys.argv[1:4]
     kwargs = dict(password=password)
     conn = fabric.Connection(host, user=user, connect_kwargs=kwargs)
-    conn.run('/mnt/flash/root/startDetector &', warn=True, hide=True)
+    conn.run('/mnt/flash/root/startDetector', warn=True)
+    os.system('reset')
 
 
 if __name__ == '__main__':
