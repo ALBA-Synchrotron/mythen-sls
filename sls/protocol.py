@@ -622,7 +622,8 @@ def fetch_frame(conn, frame_size, dynamic_range):
     elif result == ResultType.FINISHED:
         return result, None
     elif result == ResultType.FAIL:
-        raise SLSError(read_message(conn))
+        # might fail because of acquisition error or because of stop
+        raise SLSError('Failed to read frame')
     else:
         raise SLSError('Unexpected frame result')
 
