@@ -642,18 +642,19 @@ def read_frame(conn, frame_size, dynamic_range):
     return read_data(conn, frame_size, dynamic_range)
 
 
+def start_acquisition_and_read_all(conn):
+    request = struct.pack('<i', CommandCode.START_AND_READ_ALL)
+    conn.write(request)
+
+
 def start_acquisition(conn, keep_connection=True):
     if keep_connection:
-        request = struct.pack('<i', CommandCode.START_AND_READ_ALL)
-        conn.write(request)
+        return start_acquisition_and_read_all(conn)
     else:
         request = struct.pack('<i', CommandCode.START_ACQUISITION)
         return request_reply(conn, request, reply_fmt=None)
 
 
-def start_acquisition_and_read_all(conn):
-    request = struct.pack('<i', CommandCode.START_AND_READ_ALL)
-    conn.write(request)
 
 
 # STOP Connection -------------------------------------------------------------
