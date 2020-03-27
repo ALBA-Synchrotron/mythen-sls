@@ -1,17 +1,17 @@
 import queue
 import threading
 
-from sls.client import Detector
-from sls.protocol import RunStatus
+from sls.client import Detector, RunStatus
+from sls.acquisition import AcquisitionThread
 
 from sardana import State, DataAccess
+from sardana.pool import AcqSynch
 from sardana.pool.controller import OneDController, Description, Access, \
     Type, Memorize, NotMemorized, MaxDimSize
 
 
 class MythenSLSController(OneDController):
 
-    gender = "Mythen"
     model = "Mythen II"
     organization = "SLS"
 
@@ -56,8 +56,11 @@ class MythenSLSController(OneDController):
         return False
 
     def StateAll(self):
-        status = self.detector.run_status
-        self.state = self.StateMap[status], status.name
+        if self.acq and self.acq.thread.is_alive():
+            self.state = State.Running, 'running acquisition'
+        else:
+            status = self.detector.run_status
+            self.state = self.StateMap[status], status.name
 
     def StateOne(self, axis):
         return self.state
@@ -65,17 +68,31 @@ class MythenSLSController(OneDController):
     def ReadOne(self, axis):
         if self.acq is None:
             raise ValueError('Not in acquisition!')
-        if self.acq.frames_ready:
-            return next(self.acq)[1].tolist()
+        synch = self.GetCtrlPar('synchronization')
+        if synch == AcqSynch.SoftwareStart:
+            frames = []
+            while not self.acq.queue.empty():
+                data = self.acq.queue.get()
+                if isinstance(data, Exception):
+                    raise data
+                frames.append(data)
+            return frames
+        else:
+            if self.acq.queue.empty():
+                return None
+            else:
+                data = self.acq.queue.get()
+                if isinstance(data, Exception):
+                    raise data
+                return data
 
     def StartOne(self, axis, value):
-        self._stop()
-        self.acq = iter(self.detector.acquisition(progress_interval=None))
+        self.acq.start()
 
     def LoadOne(self, axis, value, repetitions, latency):
-        self.detector.exposure_time = value
-        self.detector.nb_frames = 1
-        self.detector.nb_cycles = 1
+        self.acq = AcquisitionThread(self.detector, exposure_time=value,
+                                     nb_frames=repetitions, nb_cycles=1)
+        self.acq.prepare()
 
     def AbortOne(Self, axis):
         if not self._stop():
@@ -98,4 +115,3 @@ class MythenSLSController(OneDController):
 
     def GetAxisExtraPar(self, axis, name):
         return self.GetCtrlPar(name)
-

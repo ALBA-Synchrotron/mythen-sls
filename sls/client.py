@@ -22,7 +22,8 @@ import numpy
 
 from . import protocol
 from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, SLSError,
-                       IdParam, Dimension, TimerType, SpeedType, ResultType)
+                       IdParam, Dimension, TimerType, SpeedType, ResultType,
+                       RunStatus)
 
 
 TEMPLATE = '''\
