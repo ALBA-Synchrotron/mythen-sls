@@ -26,22 +26,22 @@ from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, SLSError,
 
 
 TEMPLATE = '''\
-{o.detector_type.name} at tcp://{o.host}:{o.conn_ctrl.port}, tcp://{o.host}:{o.conn_stop.port}
-Serial nb.: {o.serial_number}
-Soft. version: {o.software_version}
-Status: {o.run_status.name}
-Dynamic range: {o.dynamic_range}
-Energy threshold: {o.energy_threshold}
-Exposure time: {o.exposure_time}
-Master: {o.master_mode.name}
-Synchronization: {o.synchronization_mode.name}
-Timing: {o.timing_mode.name}
-Nb. frames: {o.nb_frames}
-Nb. cycles: {o.nb_cycles}
-Nb. gates: {o.nb_gates}
+{o.detector_type.name} at tcp://{o.host}:{o.conn_ctrl.port}/{o.conn_stop.port}
+     Serial number: {o.serial_number}
+  Software version: {o.software_version}
+            Status: {o.run_status.name}
+     Dynamic range: {o.dynamic_range}
+  Energy threshold: {o.energy_threshold}
+     Exposure time: {o.exposure_time}
+  Number of frames: {o.nb_frames}
+  Number of cycles: {o.nb_cycles}
+   Number of gates: {o.nb_gates}
+            Master: {o.master_mode.name}
+   Synchronization: {o.synchronization_mode.name}
+            Timing: {o.timing_mode.name}
 Delay after triger: {o.delay_after_trigger}
-Readout: {o.readout}
-External signals: {external_signals}'''
+           Readout: {o.readout.name}
+  External signals: {external_signals}'''
 
 
 class Connection:
