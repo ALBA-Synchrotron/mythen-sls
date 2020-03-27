@@ -101,6 +101,8 @@ class Connection:
         return data
 
     def fileno(self):
+        if self.sock is None:
+            return -1
         return self.sock.fileno()
 
 
