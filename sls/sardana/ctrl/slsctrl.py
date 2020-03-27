@@ -29,6 +29,11 @@ class MythenSLSController(OneDController):
             Description: 'Energy threshold (eV)',
             Type: float,
             Access: DataAccess.ReadWrite
+        },
+        'config': {
+            Description: 'Active configuration',
+            Type: str,
+            Access: DataAccess.ReadOnly
         }
     }
 
@@ -105,7 +110,10 @@ class MythenSLSController(OneDController):
             return super().SetCtrlPar(name, value)
 
     def GetCtrlPar(self, name):
-        if name in dir(self.detector):
+        name = name.lower()
+        if name == 'config':
+            return repr(self.detector)
+        elif name in dir(self.detector):
             return getattr(self.detector, name)
         else:
             return super().GetCtrlPar(name)
