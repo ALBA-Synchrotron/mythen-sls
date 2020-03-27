@@ -94,7 +94,7 @@ class MythenSLSController(OneDController):
                                      nb_frames=repetitions, nb_cycles=1)
         self.acq.prepare()
 
-    def AbortOne(Self, axis):
+    def AbortOne(self, axis):
         if not self._stop():
             self.detector.stop_acquisition()
 
