@@ -589,13 +589,6 @@ class Acquisition:
                 self.stop()
                 raise
 
-    def frames_ready(self):
-        conn = self.detector.conn_ctrl
-        try:
-            return bool(select.select((conn,), (), (), 0)[0])
-        except ValueError:
-            return False
-
     def stop(self):
         self._stopped = True
         self._detector.stop_acquisition()
