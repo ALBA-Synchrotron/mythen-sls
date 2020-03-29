@@ -51,7 +51,7 @@ class MythenSLS(Device):
     def measurement_time(self):
         return self.mythen.measurement_time
 
-    @attribute
+    @attribute(dtype=int)
     def energy_threshold(self):
         return self.mythen.energy_threshold
 
