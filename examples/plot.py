@@ -1,11 +1,18 @@
 import argparse
 import threading
 
+import pyqtgraph
+from pyqtgraph.Qt import QtGui, QtCore
+
 import sls.client
-import pyqtgraph.Qt
+
+
+class QDetector(QtCore.QObject):
+    newFrame = QtCore.Signal(object)
+
 
 def run(options):
-    app = pyqtgraph.Qt.QtGui.QApplication([])
+    app = QtGui.QApplication([])
 
     plot = pyqtgraph.plot()
     curve = plot.plot()
@@ -14,10 +21,13 @@ def run(options):
     mythen = sls.client.Detector(options.host)
     mythen.nb_frames = options.nb_frames
     mythen.exposure_time = options.exposure_time
+    qmythen = QDetector()
 
     def acquire(curve):
         for frame in mythen.acquire():
-            curve.setData(frame)
+            qmythen.newFrame.emit(frame)
+
+    qmythen.newFrame.connect(curve.setData)
 
     th = threading.Thread(target=acquire, args=(curve,), daemon=True)
     th.start()
