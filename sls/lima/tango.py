@@ -29,7 +29,7 @@ class MythenSLS(Device):
         return DevState.ON
 
     def dev_status(self):
-        return 'The device is {}'.format(self.mythen.run_status.name)
+        return repr(self.mythen)
 
     @attribute
     def exposure_time_left(self):
@@ -58,7 +58,6 @@ class MythenSLS(Device):
     @energy_threshold.setter
     def energy_threshold(self, energy_threshold):
         self.mythen.energy_threshold = energy_threshold
-
 
 
 def get_tango_specific_class_n_device():
