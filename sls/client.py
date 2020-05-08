@@ -260,6 +260,10 @@ class Detector:
     def get_module(self, mod_nb):
         return protocol.get_module(self.conn_ctrl, mod_nb)
 
+    @auto_ctrl_connect
+    def set_module(self, mod_info):
+        return protocol.set_module(self.conn_ctrl, mod_info)
+
     @auto_stop_connect
     def get_time_left(self, timer):
         return protocol.get_time_left(self.conn_stop, timer)

@@ -336,12 +336,15 @@ class Detector:
 
     def set_module(self, conn, addr):
         fields = read_format(conn, '<iiiiiii')
-        mod_nb = fields[0]
+        mod_nb, serial_nb, nb_channels, nb_chips, nb_dacs, nb_adcs, reg = fields
         self.log.info('set module[%d]', mod_nb)
-        nb_channels, nb_chips, nb_dacs, nb_adcs = fields[2:6]
-        mod = dict(id=mod_nb, serial_nb=fields[1], settings=fields[6])
+        mod = dict(id=mod_nb, settings=fields[6])
         # garbage: don't know why the client sends its private pointers
-        fields = read_format(conn, '<iiii')
+        # ok, I understand: the idea is to match the internal sls_detector_module
+        # struct in the server - they are in luck because the size of int matches
+        # the size of the pointer in the struct (because the detector is a 32bits
+        # lnux)
+        dacs0, adcs0, chip0, channel0  = read_format(conn, '<iiii')
         mod['gain'], mod['offset'] = read_format(conn, '<dd')
         mod['dacs'] = read_format(conn, '<{}i'.format(nb_dacs)) if nb_dacs else []
         mod['adcs'] = read_format(conn, '<{}i'.format(nb_adcs)) if nb_adcs else []

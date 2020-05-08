@@ -86,13 +86,15 @@ def _load(module_serial_numbers, settings_base_dir, settings):
     settings_base_dir = pathlib.Path(settings_base_dir)
     for setting in settings:
         modules = []
-        for sn in module_serial_numbers:
-            sn_str = '{:03x}'.format(sn)[-3:]
+        for mod_nb, sn in enumerate(module_serial_numbers):
+            sn_str = (sn if isinstance(sn, str) else '{:03x}'.format(sn))[-3:]
             noise_fname = settings_base_dir.joinpath(setting, 'noise.sn' + sn_str)
             calib_fname = settings_base_dir.joinpath(setting, 'calibration.sn' + sn_str)
             module = _load_module_settings(noise_fname)
             module['offset'], module['gain'] = _load_calibration(calib_fname)
+            module['reg'] = setting
             module['serial_number'] = sn
+            module['module_nb'] = mod_nb
             modules.append(module)
         calibration[setting] = dict(modules=modules)
     return dict(calibration=calibration)

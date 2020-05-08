@@ -397,6 +397,52 @@ def get_module(conn, mod_nb):
     return result, info
 
 
+def set_module(conn, mod_info):
+    """
+    mod_info: a dict with:
+    - module_nb: (int) module number
+    - serial_number: (int) module serial number (not important because not taken into account)
+    - reg: settings level string ('standard', 'fast', etc)
+    - dacs: (list[int]) of dac values (optional if there are no DACs)
+    - adcs: (list[int]) of adc values (optional if there are no ADCs)
+    - chips: (list[int] of dict:
+      - register: (int) chip register
+      - channels: (list[int]) channel values
+    - gain: (double) gain as float
+    - offset: (double) offset
+    """
+    serial_number = mod_info['serial_number']
+    if isinstance(serial_number, str):
+        serial_number = int(serial_number, 16)
+    reg = mod_info['reg']
+    if isinstance(reg, str):
+        reg = DetectorSettings[reg.upper()]
+    chips = mod_info['chips']
+    dacs = mod_info.get('dacs', [])
+    adcs = mod_info.get('adcs', [])
+    channels = [channel for chip in chips for channel in chip['channels']]
+    assert len(channels) == 128*10
+    chip_registers = [chip['register'] for chip in chips]
+    values = [
+        CommandCode.SET_MODULE, mod_info['module_nb'], serial_number,
+        len(channels), len(chips), len(dacs), len(adcs), reg,
+        # the following 4 values are just fill garbage to match the
+        # C struct sls_detector_module structure on the server. We try to fill
+        # exactly the same data as official sls detector library to avoid problems
+        dacs[0] if dacs else 0,
+        adcs[0] if adcs else 0,
+        chips[0]['register'],
+        channels[0]
+    ]
+    values += dacs + adcs + chip_registers + channels
+    assert len(values) == 1+7+4+6+0+10+128*10
+    fmt = '<{}idd'.format(len(values))
+    values += [mod_info['gain'], mod_info['offset']]
+    request = struct.pack(fmt, *values)
+    result, reply = request_reply(conn, request, reply_fmt='<i')
+    return result, reply[0]
+
+
 def get_id(conn, mode, mod_nb=None):
     assert isinstance(mode, IdParam)
     if mode == IdParam.MODULE_SERIAL_NUMBER:

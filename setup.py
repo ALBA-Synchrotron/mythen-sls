@@ -14,7 +14,7 @@ if TESTING:
     setup_requirements += ['pytest-runner']
 test_requirements = ['pytest', 'pytest-cov']
 extras_requirements = {
-    'simulator': ['pyyaml', 'gevent', 'scipy'],
+    'simulator': ['pyyaml', 'toml', 'gevent', 'scipy'],
     'gui': ['pyqtgraph'],
     'lima': [], # one day lima may be in pypi
     'server': ['fabric']
