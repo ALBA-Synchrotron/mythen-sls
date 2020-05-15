@@ -16,9 +16,13 @@ test_requirements = ["pytest", "pytest-cov"]
 extras_requirements = {
     "simulator": ["pyyaml", "toml", "gevent", "scipy"],
     "gui": ["pyqtgraph"],
-    "lima": [], # one day lima may be in pypi
+    "lima": [],  # one day lima may be in pypi
     "server": ["fabric"]
 }
+
+with open("README.md") as f:
+    description = f.read()
+
 
 setup(
     author="Jose Tiago Macara Coutinho",
@@ -33,7 +37,9 @@ setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8"
     ],
-    description="Mythen SLS detector interface",
+    description="SLS detector (library + lima (CLI and tango-ds) + simulator + GUI)",
+    long_description=description,
+    long_description_content_type="text/markdown",
     entry_points={
         "console_scripts": [
             "sls-gui=sls.gui:main [gui]",
@@ -50,7 +56,6 @@ setup(
     },
     install_requires=requirements,
     license="MIT license",
-    long_description="Myhen SLS detector library and (optional) simulator",
     include_package_data=True,
     keywords="mythen, sls, simulator",
     name="sls-detector",
