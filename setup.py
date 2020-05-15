@@ -69,6 +69,6 @@ setup(
     extras_require=extras_requirements,
     python_requires=">=3.5",
     url="https://github.com/alba-synchrotron/sls-detector",
-    version="1.0.0",
+    version="1.0.1",
     zip_safe=True
 )
