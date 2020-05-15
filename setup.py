@@ -38,6 +38,7 @@ setup(
         'console_scripts': [
             'sls-gui=sls.gui:main [gui]',
             'sls-simulator=sls.simulator:main [simulator]',
+            'sls-lima=sls.lima.camera:main [lima]',
             'sls-lima-tango-server=sls.lima.tango:main [lima]'
         ],
         'Lima_camera': [
@@ -52,7 +53,7 @@ setup(
     long_description="Myhen SLS detector library and (optional) simulator",
     include_package_data=True,
     keywords='mythen, sls, simulator',
-    name='sls',
+    name='sls-detector',
     packages=find_packages(include=['sls']),
     package_data={
         'sls': ['*.ui']
