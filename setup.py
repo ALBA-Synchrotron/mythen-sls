@@ -63,7 +63,7 @@ setup(
     tests_require=test_requirements,
     extras_require=extras_requirements,
     python_requires='>=3.5',
-    url='https://gitlab.com/tiagocoutinho/sls',
+    url='https://github.com/alba-synchrotron/sls-detector',
     version='0.1.0',
     zip_safe=True
 )
