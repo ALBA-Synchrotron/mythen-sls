@@ -9,16 +9,17 @@ TESTING = any(x in sys.argv for x in ["test", "pytest"])
 
 requirements = ["numpy"]
 
-setup_requirements = []
+setup_requires = []
 if TESTING:
-    setup_requirements += ["pytest-runner"]
-test_requirements = ["pytest", "pytest-cov"]
-extras_requirements = {
+    setup_requires += ["pytest-runner"]
+test_require = ["pytest", "pytest-cov"]
+extras_require = {
     "simulator": ["pyyaml", "toml", "gevent", "scipy"],
     "gui": ["pyqtgraph"],
-    "lima": [],  # one day lima may be in pypi
-    "server": ["fabric"]
+    "lima": ["lima_toolbox"],  # one day lima may be in pypi
+    "server": ["fabric"],
 }
+extras_require["all"] = list(set.union(*(set(i) for i in extras_require.values())))
 
 with open("README.md") as f:
     description = f.read()
@@ -48,10 +49,13 @@ setup(
             "sls-lima-tango-server=sls.lima.tango:main [lima]"
         ],
         "Lima_camera": [
-            "MythenSLS = sls.lima.camera"
+            "MythenSLS=sls.lima.camera"
         ],
         "Lima_tango_camera": [
-            "MythenSLS = sls.lima.tango"
+            "MythenSLS=sls.lima.tango"
+        ],
+        "lima.cli.camera": [
+            'MythenSLS=sls.lima.cli:mythensls [lima]'
         ]
     },
     install_requires=requirements,
@@ -63,10 +67,10 @@ setup(
     package_data={
         "sls": ["*.ui"]
     },
-    setup_requires=setup_requirements,
+    setup_requires=setup_requires,
     test_suite="tests",
-    tests_require=test_requirements,
-    extras_require=extras_requirements,
+    tests_require=test_require,
+    extras_require=extras_require,
     python_requires=">=3.5",
     url="https://github.com/alba-synchrotron/sls-detector",
     version="1.0.1",
