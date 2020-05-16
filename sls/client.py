@@ -26,23 +26,7 @@ from .protocol import (DEFAULT_CTRL_PORT, DEFAULT_STOP_PORT, SLSError,
                        RunStatus)
 
 
-TEMPLATE = '''\
-{o.detector_type.name} at tcp://{o.host}:{o.conn_ctrl.port}/{o.conn_stop.port}
-     Serial number: {o.serial_number}
-  Software version: {o.software_version}
-            Status: {o.run_status.name}
-     Dynamic range: {o.dynamic_range}
-  Energy threshold: {o.energy_threshold}
-     Exposure time: {o.exposure_time}
-  Number of frames: {o.nb_frames}
-  Number of cycles: {o.nb_cycles}
-   Number of gates: {o.nb_gates}
-            Master: {o.master_mode.name}
-   Synchronization: {o.synchronization_mode.name}
-            Timing: {o.timing_mode.name}
-Delay after triger: {o.delay_after_trigger}
-           Readout: {o.readout.name}
-  External signals: {external_signals}'''
+TEMPLATE = "SLS Detector at tcp://{o.host}:{o.conn_ctrl.port}/{o.conn_stop.port}\n"
 
 
 class Connection:
@@ -484,9 +468,34 @@ class Detector:
     def last_client_ip(self):
         return protocol.get_last_client_ip(self.conn_ctrl)
 
+    def dump(self):
+        return {
+            "Detector type": self.detector_type.name,
+            "Serial number": self.serial_number,
+            "Software version": self.software_version,
+            "Status": self.run_status.name,
+            "Dynamic range": self.dynamic_range,
+            "Energy threshold": self.energy_threshold,
+            "Exposure time": self.exposure_time,
+            "Number of frames": self.nb_frames,
+            "Number of cycles": self.nb_cycles,
+            "Number of gates": self.nb_gates,
+            "Master": self.master_mode.name,
+            "Synchronization": self.synchronization_mode.name,
+            "Timing": self.timing_mode.name,
+            "Delay after triger": self.delay_after_trigger,
+            "Readout": self.readout.name,
+            "Settings": self.settings.name,
+            "External signals": [self.get_external_signal(i).name for i in range(4)]
+        }
+
     def __repr__(self):
-        external_signals = [self.get_external_signal(i).name for i in range(4)]
-        return TEMPLATE.format(o=self, external_signals=external_signals)
+        header = TEMPLATE.format(o=self)
+        dinfo = self.dump()
+        size = max(len(i) for i in dinfo)
+        template = "{{:>{}}}: {{}}".format(size)
+        lines = (template.format(key, dinfo[key]) for key in dinfo)
+        return header + '\n'.join(lines)
 
 
 class Acquisition:
