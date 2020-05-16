@@ -384,8 +384,12 @@ class Detector:
     lock_server = property(get_lock_server, set_lock_server)
 
     @auto_ctrl_connect
-    def get_settings(self, mod_nb):
+    def get_settings(self, mod_nb=0):
         return protocol.get_settings(self.conn_ctrl, mod_nb)
+
+    @property
+    def settings(self):
+        return self.get_settings()
 
     @stop_property
     def run_status(self):
