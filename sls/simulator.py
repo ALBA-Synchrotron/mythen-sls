@@ -73,6 +73,7 @@ DEFAULT_DETECTOR_CONFIG = {
 
 
 def sanitize_config(config):
+    config.setdefault('listen', '0')
     config.setdefault('ctrl_port', DEFAULT_CTRL_PORT)
     config.setdefault('stop_port', DEFAULT_STOP_PORT)
     dtype = DetectorType(config.get('type', DetectorType.MYTHEN))
@@ -568,14 +569,14 @@ class Detector:
     def start(self):
         ctrl_port = self['ctrl_port']
         stop_port = self['stop_port']
-
-        ctrl = gevent.server.StreamServer(('0.0.0.0', ctrl_port),
+        listen = self['listen']
+        ctrl = gevent.server.StreamServer((listen, ctrl_port),
                                           self.handle_ctrl)
-        stop = gevent.server.StreamServer(('0.0.0.0', stop_port),
+        stop = gevent.server.StreamServer((listen, stop_port),
                                           self.handle_stop)
         tasks = [gevent.spawn(s.serve_forever) for s in [ctrl, stop]]
         self.servers = list(zip([ctrl, stop], tasks))
-        self.log.info('Ready to accept requests')
+        self.log.info('Ready to accept requests on %s:%s/%s', listen, ctrl_port, stop_port)
         return self.servers
 
     def stop(self):
