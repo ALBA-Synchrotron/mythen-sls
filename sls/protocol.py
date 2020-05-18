@@ -334,10 +334,8 @@ def request_reply(conn, request, reply_fmt='<i'):
     return result, reply
 
 
-def update_client(conn):
-    request = struct.pack('<i', CommandCode.UPDATE_CLIENT)
-    result, reply = request_reply(conn, request, reply_fmt='<16siiiiiiqqqqqqq')
-    info = dict(last_client_ip=reply[0].strip(b'\x00').decode(),
+def decode_update_client(reply):
+    return dict(last_client_ip=reply[0].strip(b'\x00').decode(),
                 nb_modules=reply[1],
                 dynamic_range=reply[3],
                 data_bytes=reply[4],
@@ -350,6 +348,12 @@ def update_client(conn):
                 nb_gates=reply[11],
                 nb_probes=reply[12],
                 nb_cycles=reply[13])
+
+
+def update_client(conn):
+    request = struct.pack('<i', CommandCode.UPDATE_CLIENT)
+    result, reply = request_reply(conn, request, reply_fmt='<16siiiiiiqqqqqqq')
+    return result, decode_update_client(reply)
     return result, info
 
 

@@ -56,7 +56,10 @@ setup(
         ],
         "lima.cli.camera": [
             'MythenSLS=sls.lima.cli:mythensls [lima]'
-        ]
+        ],
+        "lima.cli.camera.scan": [
+            "MythenSLS=sls.lima.cli:scan [lima]"
+        ],
     },
     install_requires=requirements,
     license="MIT license",
