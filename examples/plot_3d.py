@@ -27,7 +27,7 @@ def run(options):
     n = options.nb_frames
 
     w = pggl.GLViewWidget()
-    w.opts['distance'] = 10000
+    w.opts['distance'] = 8000
     w.show()
     w.setWindowTitle('Mythen Acquisition')
 

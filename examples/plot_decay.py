@@ -34,11 +34,9 @@ def run(options):
         if len(curves) == N:
             plot.removeItem(curves[0])
             curves.pop(0)
-        print(10*'-')
         for i, curve in enumerate(curves[::-1]):
             v = 100 - 20 * i
             curve.setPen(4*(v,))
-            print(i, v)
         curve = plot.plot(frame)
         curve.setPen('r')
         curves.append(curve)
