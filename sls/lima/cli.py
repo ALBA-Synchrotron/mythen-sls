@@ -6,9 +6,9 @@ import urllib.parse
 import click
 import Lima.Core
 from beautifultable import BeautifulTable
-from Lima.toolbox.cli import camera, url, table_style, max_width
-from Lima.toolbox.info import info_list
-from Lima.toolbox.network import get_subnet_addresses, get_host_by_addr
+from limatb.cli import camera, url, table_style, max_width
+from limatb.info import info_list
+from limatb.network import get_subnet_addresses, get_host_by_addr
 
 from .camera import Interface
 from ..client import Detector
@@ -91,8 +91,6 @@ async def test_communication(address, port):
 
 
 async def find_detectors(port=DEFAULT_CTRL_PORT, timeout=2.0):
-    import aiohttp
-
     detectors = []
     addresses = get_subnet_addresses()
     coros = [test_communication(address, port) for address in addresses]

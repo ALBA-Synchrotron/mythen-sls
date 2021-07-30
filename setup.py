@@ -16,7 +16,7 @@ test_require = ["pytest", "pytest-cov"]
 extras_require = {
     "simulator": ["pyyaml", "toml", "gevent", "scipy"],
     "gui": ["pyqtgraph"],
-    "lima": ["lima_toolbox"],  # one day lima may be in pypi
+    "lima": ["lima-toolbox"],  # one day lima may be in pypi
     "server": ["fabric"],
 }
 extras_require["all"] = list(set.union(*(set(i) for i in extras_require.values())))
@@ -54,10 +54,10 @@ setup(
         "Lima_tango_camera": [
             "MythenSLS=sls.lima.tango"
         ],
-        "lima.cli.camera": [
+        "limatb.cli.camera": [
             'MythenSLS=sls.lima.cli:mythensls [lima]'
         ],
-        "lima.cli.camera.scan": [
+        "limatb.cli.camera.scan": [
             "MythenSLS=sls.lima.cli:scan [lima]"
         ],
     },
